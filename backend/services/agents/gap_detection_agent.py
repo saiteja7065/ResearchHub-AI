@@ -9,18 +9,18 @@ class GapDetectionAgent:
         self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
         self.model = "llama-3.1-8b-instant"
 
-    def run(self, workspace_id: str, user_message: str, chat_history: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
+    def run(self, workspace_id: str, user_message: str, chat_history: Optional[List[Dict[str, str]]] = None, user_id: str = None) -> Dict[str, Any]:
         print("Running GapDetectionAgent...")
         
         # 1. Retrieve relevant context
-        context_chunks = chat_agent._search_context(workspace_id, user_message, top_k=8)
+        context_chunks = chat_agent._search_context(workspace_id, user_message, top_k=10)
         truncated_chunks = [chunk[:1000] + "..." if len(chunk) > 1000 else chunk for chunk in context_chunks]
         context_text = "\\n\\n---\\n\\n".join(truncated_chunks) if truncated_chunks else "No relevant documents found."
         
         # 2. Build Gap Detection Prompt
-        system_prompt = f"""You are an expert Research Gap Analyst.
-Your task is to analyze the provided literature excerpts and identify missing areas of research, unexplored methodologies, or future work suggested by the authors. 
-Highlight what is *not* known or what limits the current studies.
+        system_prompt = f"""You are an expert AI Research Assistant focused on identifying missing research, underexplored areas, and future work.
+Analyze the provided excerpts and highlight what questions remain unanswered, limitations of current methodologies, or specific "future work" suggested by the authors.
+Be precise and structured.
 
 <context>
 {context_text}
@@ -34,21 +34,23 @@ Highlight what is *not* known or what limits the current studies.
         completion = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
-            temperature=0.5, 
+            temperature=0.3,
             max_tokens=1024,
         )
         response_text = completion.choices[0].message.content
 
         # 4. Save to Database
-        try:
-            supabase.table("research_insights").insert({
-                "workspace_id": workspace_id,
-                "type": "research_gap",
-                "content": response_text,
-                "source_papers": [] 
-            }).execute()
-        except Exception as e:
-            print(f"Failed to save insight to DB: {e}")
+        if "no obvious gaps" not in response_text.lower():
+            try:
+                supabase.table("research_insights").insert({
+                    "workspace_id": workspace_id,
+                    "user_id": user_id,
+                    "type": "research_gap",
+                    "content": response_text,
+                    "source_papers": [] 
+                }).execute()
+            except Exception as e:
+                print(f"Failed to save insight to DB: {e}")
 
         return {
             "response": response_text,

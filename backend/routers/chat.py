@@ -39,6 +39,7 @@ async def chat_with_agent(
             workspace_id=request.workspace_id,
             user_message=request.message,
             chat_history=history,
+            user_id=user.id
         )
         
         return ChatResponse(**result)

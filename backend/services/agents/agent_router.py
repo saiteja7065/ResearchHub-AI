@@ -61,7 +61,7 @@ Output ONLY the exact string from the list above, nothing else."""
             print(f"Routing failed, defaulting to GENERAL_CHAT: {e}")
             return AgentType.GENERAL_CHAT
 
-    def chat(self, workspace_id: str, user_message: str, chat_history: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
+    def chat(self, workspace_id: str, user_message: str, chat_history: Optional[List[Dict[str, str]]] = None, user_id: str = None) -> Dict[str, Any]:
         """
         The main entrypoint for the multi-agent system.
         Classifies the query and executes the specific agent pipeline.
@@ -75,13 +75,13 @@ Output ONLY the exact string from the list above, nothing else."""
         from services.chat_agent import chat_agent
 
         if route == AgentType.SUMMARIZE:
-            return summarization_agent.run(workspace_id, user_message, chat_history)
+            return summarization_agent.run(workspace_id, user_message, chat_history, user_id)
         
         elif route == AgentType.CONTRADICTION:
-            return contradiction_agent.run(workspace_id, user_message, chat_history)
+            return contradiction_agent.run(workspace_id, user_message, chat_history, user_id)
         
         elif route == AgentType.GAP_DETECTION:
-            return gap_detection_agent.run(workspace_id, user_message, chat_history)
+            return gap_detection_agent.run(workspace_id, user_message, chat_history, user_id)
         
         else: # Fallback to standard contextual RAG chat
             return chat_agent.chat(workspace_id, user_message, chat_history)

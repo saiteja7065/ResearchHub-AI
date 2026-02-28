@@ -9,7 +9,7 @@ class SummarizationAgent:
         self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
         self.model = "llama-3.1-8b-instant"
 
-    def run(self, workspace_id: str, user_message: str, chat_history: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
+    def run(self, workspace_id: str, user_message: str, chat_history: Optional[List[Dict[str, str]]] = None, user_id: str = None) -> Dict[str, Any]:
         print("Running SummarizationAgent...")
         
         # 1. Retrieve relevant context
@@ -43,12 +43,11 @@ Avoid generic fluff. Provide structured bullet points if appropriate.
         try:
             supabase.table("research_insights").insert({
                 "workspace_id": workspace_id,
+                "user_id": user_id,
                 "type": "summary",
                 "content": response_text,
                 "source_papers": [] # We don't have exact paper ID mapping yet from Qdrant, left empty for now
             }).execute()
-        except dict as e: # Handle potential Supabase API errors gracefully
-            print(f"Failed to save insight to DB: {e}")
         except Exception as e:
             print(f"Failed to save insight to DB: {e}")
 
