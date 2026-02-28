@@ -1,0 +1,291 @@
+import { useState, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Send, Bot, User, Sparkles, BookOpen, Loader2, ChevronDown } from "lucide-react";
+import { fetchApi } from "../lib/api";
+import { useAuth } from "../store/AuthContext";
+import { supabase } from "../lib/supabase";
+import InsightsPanel from "../components/InsightsPanel";
+interface Message {
+    role: "user" | "assistant";
+    content: string;
+    contextUsed?: number;
+}
+
+interface Workspace {
+    id: string;
+    name: string;
+}
+
+export default function AIAgentsView() {
+    const { user } = useAuth();
+    const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+    const [selectedWorkspace, setSelectedWorkspace] = useState<Workspace | null>(null);
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [input, setInput] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
+    const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+        if (user) fetchWorkspaces();
+    }, [user]);
+
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages]);
+
+    const fetchWorkspaces = async () => {
+        const { data } = await supabase.from("workspaces").select("id, name");
+        if (data) {
+            setWorkspaces(data);
+            if (data.length > 0) setSelectedWorkspace(data[0]);
+        }
+    };
+
+    const sendMessage = async () => {
+        if (!input.trim() || !selectedWorkspace || isLoading) return;
+
+        const userMessage: Message = { role: "user", content: input.trim() };
+        const newMessages = [...messages, userMessage];
+        setMessages(newMessages);
+        setInput("");
+        setIsLoading(true);
+
+        if (textareaRef.current) textareaRef.current.style.height = "auto";
+
+        try {
+            const res = await fetchApi("/chat/", {
+                method: "POST",
+                body: JSON.stringify({
+                    workspace_id: selectedWorkspace.id,
+                    message: userMessage.content,
+                    history: messages.map((m) => ({ role: m.role, content: m.content })),
+                }),
+            }) as unknown as { response: string; context_used: number; model: string };
+
+            setMessages([
+                ...newMessages,
+                {
+                    role: "assistant",
+                    content: res.response,
+                    contextUsed: res.context_used,
+                },
+            ]);
+        } catch {
+            setMessages([
+                ...newMessages,
+                {
+                    role: "assistant",
+                    content: "Sorry, I encountered an error. Please check your Groq API key in the backend `.env` file.",
+                },
+            ]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    };
+
+    const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        setInput(e.target.value);
+        e.target.style.height = "auto";
+        e.target.style.height = `${Math.min(e.target.scrollHeight, 150)}px`;
+    };
+
+    return (
+        <div className="flex w-full h-full bg-[#0a0a0f] overflow-hidden">
+            {/* Left Column: Chat Area */}
+            <div className="flex-1 flex flex-col min-w-0">
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center shadow-lg shadow-purple-900/30">
+                            <Sparkles size={16} className="text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-white font-semibold text-sm">AI Research Agent</h1>
+                            <p className="text-white/40 text-xs">Powered by Llama 3 · RAG-enabled</p>
+                        </div>
+                    </div>
+
+                    {/* Workspace Selector */}
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-sm text-white/70"
+                        >
+                            <BookOpen size={13} className="text-purple-400" />
+                            <span>{selectedWorkspace?.name || "Select Workspace"}</span>
+                            <ChevronDown size={13} className={`transition-transform ${showWorkspaceDropdown ? "rotate-180" : ""}`} />
+                        </button>
+
+                        <AnimatePresence>
+                            {showWorkspaceDropdown && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -8 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -8 }}
+                                    className="absolute right-0 top-full mt-2 w-56 bg-[#12121a] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden"
+                                >
+                                    {workspaces.map((ws) => (
+                                        <button
+                                            key={ws.id}
+                                            onClick={() => {
+                                                setSelectedWorkspace(ws);
+                                                setShowWorkspaceDropdown(false);
+                                                setMessages([]);
+                                            }}
+                                            className={`w-full text-left px-4 py-3 text-sm hover:bg-white/5 transition-colors ${selectedWorkspace?.id === ws.id ? "text-purple-400" : "text-white/70"
+                                                }`}
+                                        >
+                                            {ws.name}
+                                        </button>
+                                    ))}
+                                    {workspaces.length === 0 && (
+                                        <p className="px-4 py-3 text-sm text-white/40">No workspaces yet</p>
+                                    )}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+                </div>
+
+                {/* Messages */}
+                <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+                    {messages.length === 0 && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="flex flex-col items-center justify-center h-full text-center gap-4 py-16"
+                        >
+                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500/20 to-purple-700/20 border border-purple-500/20 flex items-center justify-center">
+                                <Sparkles size={28} className="text-purple-400" />
+                            </div>
+                            <div>
+                                <h2 className="text-white font-semibold text-lg mb-1">Ask About Your Research</h2>
+                                <p className="text-white/40 text-sm max-w-sm">
+                                    Upload documents to your workspace, then ask me anything about them. I'll find the most relevant information.
+                                </p>
+                            </div>
+                            <div className="grid grid-cols-1 gap-2 w-full max-w-sm mt-2">
+                                {[
+                                    "Summarize the key findings",
+                                    "What are the main methodologies used?",
+                                    "Identify any research gaps mentioned",
+                                ].map((suggestion) => (
+                                    <button
+                                        key={suggestion}
+                                        onClick={() => setInput(suggestion)}
+                                        className="text-left px-4 py-2.5 rounded-lg border border-white/5 bg-white/3 hover:bg-white/8 text-white/50 hover:text-white/80 text-sm transition-all"
+                                    >
+                                        {suggestion}
+                                    </button>
+                                ))}
+                            </div>
+                        </motion.div>
+                    )}
+
+                    <AnimatePresence initial={false}>
+                        {messages.map((msg, i) => (
+                            <motion.div
+                                key={i}
+                                initial={{ opacity: 0, y: 16 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.3 }}
+                                className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                            >
+                                {msg.role === "assistant" && (
+                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-700 flex-shrink-0 flex items-center justify-center mt-1">
+                                        <Bot size={14} className="text-white" />
+                                    </div>
+                                )}
+
+                                <div
+                                    className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${msg.role === "user"
+                                        ? "bg-violet-600 text-white rounded-tr-sm"
+                                        : "bg-white/5 border border-white/8 text-white/85 rounded-tl-sm"
+                                        }`}
+                                >
+                                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                                    {msg.role === "assistant" && msg.contextUsed !== undefined && msg.contextUsed > 0 && (
+                                        <p className="text-purple-400/60 text-xs mt-2 flex items-center gap-1">
+                                            <BookOpen size={10} />
+                                            Based on {msg.contextUsed} document chunk{msg.contextUsed !== 1 ? "s" : ""}
+                                        </p>
+                                    )}
+                                </div>
+
+                                {msg.role === "user" && (
+                                    <div className="w-8 h-8 rounded-lg bg-white/10 flex-shrink-0 flex items-center justify-center mt-1">
+                                        <User size={14} className="text-white/70" />
+                                    </div>
+                                )}
+                            </motion.div>
+                        ))}
+                    </AnimatePresence>
+
+                    {isLoading && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 16 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="flex gap-3"
+                        >
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-700 flex-shrink-0 flex items-center justify-center">
+                                <Bot size={14} className="text-white" />
+                            </div>
+                            <div className="bg-white/5 border border-white/8 rounded-2xl rounded-tl-sm px-4 py-3">
+                                <div className="flex items-center gap-2 text-white/40">
+                                    <Loader2 size={14} className="animate-spin" />
+                                    <span className="text-sm">Thinking...</span>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    <div ref={messagesEndRef} />
+                </div>
+
+                {/* Input */}
+                <div className="px-6 py-4 border-t border-white/5">
+                    <div className="flex items-end gap-3 bg-white/5 border border-white/10 rounded-2xl px-4 py-3 focus-within:border-purple-500/50 transition-colors">
+                        <textarea
+                            ref={textareaRef}
+                            value={input}
+                            onChange={handleTextareaChange}
+                            onKeyDown={handleKeyDown}
+                            placeholder={selectedWorkspace ? `Ask about "${selectedWorkspace.name}"…` : "Select a workspace first"}
+                            disabled={!selectedWorkspace}
+                            rows={1}
+                            className="flex-1 bg-transparent text-white placeholder-white/25 text-sm resize-none outline-none max-h-36 disabled:opacity-40"
+                        />
+                        <button
+                            onClick={sendMessage}
+                            disabled={!input.trim() || !selectedWorkspace || isLoading}
+                            className="w-8 h-8 flex-shrink-0 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all active:scale-95"
+                        >
+                            {isLoading ? (
+                                <Loader2 size={14} className="text-white animate-spin" />
+                            ) : (
+                                <Send size={14} className="text-white" />
+                            )}
+                        </button>
+                    </div>
+                    <p className="text-white/20 text-xs text-center mt-2">
+                        Press Enter to send · Shift+Enter for new line
+                    </p>
+                </div>
+            </div>
+
+            {/* Right Column: Insights Panel */}
+            <div className="w-80 md:w-96 flex-shrink-0 hidden lg:block">
+                <InsightsPanel workspaceId={selectedWorkspace?.id || null} />
+            </div>
+        </div>
+    );
+}
