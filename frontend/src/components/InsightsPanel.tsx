@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { fetchApi } from "../lib/api";
-import { FileText, AlertTriangle, Target, Loader2, Clock } from "lucide-react";
+import { fetchApi, API_BASE_URL } from "../lib/api";
+import { supabase } from "../lib/supabase";
+import { FileText, AlertTriangle, Target, Loader2, Clock, Download, FileDown, File } from "lucide-react";
 
 interface Insight {
     id: string;
@@ -17,6 +18,7 @@ interface InsightsPanelProps {
 export default function InsightsPanel({ workspaceId }: InsightsPanelProps) {
     const [insights, setInsights] = useState<Insight[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [isExporting, setIsExporting] = useState<"none" | "pptx" | "md" | "pdf">("none");
     const [filter, setFilter] = useState<"all" | "summary" | "contradiction" | "research_gap">("all");
 
     // Fetch insights when workspace changes
@@ -46,6 +48,50 @@ export default function InsightsPanel({ workspaceId }: InsightsPanelProps) {
 
     }, [workspaceId]);
 
+    const handleExport = async (type: "pptx" | "md" | "pdf") => {
+        if (!workspaceId) return;
+        setIsExporting(type);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+
+            let endpoint = `${API_BASE_URL}/workspaces/${workspaceId}/export/${type === "md" ? "markdown" : type}`;
+
+            const response = await fetch(endpoint, {
+                method: "GET",
+                headers: token ? { "Authorization": `Bearer ${token}` } : {}
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ detail: "Export failed" }));
+                throw new Error(errorData.detail || "Export failed. You may need to install wkhtmltopdf for PDF export.");
+            }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+
+            // Try to extract filename from Content-Disposition if available
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = `Research_Insights.${type}`;
+            if (contentDisposition && contentDisposition.includes('filename=')) {
+                filename = contentDisposition.split('filename=')[1].replace(/"/g, '');
+            }
+
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (err: any) {
+            console.error(`Failed to export ${type.toUpperCase()}:`, err);
+            alert(`Failed to export presentation: ${err.message}`);
+        } finally {
+            setIsExporting("none");
+        }
+    };
+
     const filteredInsights = insights.filter(i => filter === "all" || i.type === filter);
 
     const getTypeDetails = (type: string) => {
@@ -73,10 +119,40 @@ export default function InsightsPanel({ workspaceId }: InsightsPanelProps) {
     return (
         <div className="h-full flex flex-col border-l border-white/5 bg-[#0a0a0f]/50 overflow-hidden">
             <div className="p-6 border-b border-white/5">
-                <h2 className="text-white font-semibold text-lg flex items-center gap-2">
-                    <SparklesIcon /> Autonomous Insights
-                </h2>
-                <p className="text-white/40 text-sm mt-1 mb-4">
+                <div className="flex flex-col mb-1 gap-2">
+                    <h2 className="text-white font-semibold text-lg flex items-center gap-2">
+                        <SparklesIcon /> Autonomous Insights
+                    </h2>
+                    {insights.length > 0 && (
+                        <div className="flex bg-[#12121a] rounded-lg border border-white/10 p-1 w-full mt-2">
+                            <button
+                                onClick={() => handleExport("md")}
+                                disabled={isExporting !== "none"}
+                                className={`flex-1 flex flex-shrink-0 items-center justify-center gap-1.5 px-2 py-1.5 disabled:opacity-50 text-white rounded-md text-[10px] font-medium transition-colors ${isExporting === "md" ? "bg-violet-600" : "hover:bg-white/10"}`}
+                            >
+                                {isExporting === "md" ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />}
+                                MD
+                            </button>
+                            <button
+                                onClick={() => handleExport("pdf")}
+                                disabled={isExporting !== "none"}
+                                className={`flex-1 flex flex-shrink-0 items-center justify-center gap-1.5 px-2 py-1.5 disabled:opacity-50 text-white rounded-md text-[10px] font-medium transition-colors ${isExporting === "pdf" ? "bg-violet-600" : "hover:bg-white/10 border-x border-white/5"}`}
+                            >
+                                {isExporting === "pdf" ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
+                                PDF
+                            </button>
+                            <button
+                                onClick={() => handleExport("pptx")}
+                                disabled={isExporting !== "none"}
+                                className={`flex-1 flex flex-shrink-0 items-center justify-center gap-1.5 px-2 py-1.5 disabled:opacity-50 text-white rounded-md text-[10px] font-medium transition-colors ${isExporting === "pptx" ? "bg-violet-600" : "hover:bg-white/10"}`}
+                            >
+                                {isExporting === "pptx" ? <Loader2 size={12} className="animate-spin" /> : <File size={12} />}
+                                PPTX
+                            </button>
+                        </div>
+                    )}
+                </div>
+                <p className="text-white/40 text-xs mb-4 mt-2">
                     Findings continuously discovered by specialized AI agents.
                 </p>
 
@@ -87,8 +163,8 @@ export default function InsightsPanel({ workspaceId }: InsightsPanelProps) {
                             key={t}
                             onClick={() => setFilter(t)}
                             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${filter === t
-                                    ? "bg-white/10 text-white border-white/20"
-                                    : "bg-transparent text-white/40 border-white/5 hover:text-white/70 hover:bg-white/5"
+                                ? "bg-white/10 text-white border-white/20"
+                                : "bg-transparent text-white/40 border-white/5 hover:text-white/70 hover:bg-white/5"
                                 }`}
                         >
                             {t === "all" ? "All" : t.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}

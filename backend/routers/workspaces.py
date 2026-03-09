@@ -1,8 +1,11 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from fastapi.responses import StreamingResponse, Response
 from typing import List
 from utils.auth import get_current_user
 from services.document_parser import document_parser
 from services.vector_db import vector_db
+from services.presentation_generator import presentation_generator
+from services.report_generator import report_generator
 from utils.supabase_client import supabase
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
@@ -73,3 +76,89 @@ async def upload_document(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+@router.get("/{workspace_id}/export/pptx")
+async def export_workspace_pptx(workspace_id: str, user=Depends(get_current_user)):
+    """
+    Generate a PowerPoint presentation from the autonomous insights in this workspace.
+    """
+    try:
+        # 1. Get workspace name
+        ws_response = supabase.table('workspaces').select('name').eq('id', workspace_id).eq('user_id', user.id).execute()
+        if not ws_response.data:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+        workspace_name = ws_response.data[0]['name']
+
+        # 2. Get insights for this workspace, ordered chronologically
+        insights_response = supabase.table('research_insights').select('*').eq('workspace_id', workspace_id).order('created_at', desc=False).execute()
+        insights = insights_response.data
+        
+        if not insights or len(insights) == 0:
+            raise HTTPException(status_code=400, detail="No insights found in this workspace to export. Use the chat to generate insights first.")
+
+        # 3. Generate PPTX Stream
+        pptx_stream = presentation_generator.generate_insights_pptx(workspace_name, insights)
+
+        # 4. Return as a file stream download
+        headers = {
+            'Content-Disposition': f'attachment; filename="{workspace_name.replace(" ", "_")}_Insights.pptx"'
+        }
+        return StreamingResponse(
+            pptx_stream, 
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation", 
+            headers=headers
+        )
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate presentation: {str(e)}")
+
+@router.get("/{workspace_id}/export/markdown")
+async def export_workspace_markdown(workspace_id: str, user=Depends(get_current_user)):
+    """
+    Generate a Markdown document from the autonomous insights in this workspace.
+    """
+    try:
+        ws_response = supabase.table('workspaces').select('name').eq('id', workspace_id).eq('user_id', user.id).execute()
+        if not ws_response.data:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+        workspace_name = ws_response.data[0]['name']
+
+        insights_response = supabase.table('research_insights').select('*').eq('workspace_id', workspace_id).order('created_at', desc=False).execute()
+        insights = insights_response.data
+        if not insights or len(insights) == 0:
+            raise HTTPException(status_code=400, detail="No insights found to export.")
+
+        md_content = report_generator.generate_markdown(workspace_name, insights)
+        headers = {'Content-Disposition': f'attachment; filename="{workspace_name.replace(" ", "_")}_Literature_Review.md"'}
+        return Response(content=md_content, media_type="text/markdown", headers=headers)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
+
+@router.get("/{workspace_id}/export/pdf")
+async def export_workspace_pdf(workspace_id: str, user=Depends(get_current_user)):
+    """
+    Generate a PDF document from the autonomous insights in this workspace.
+    """
+    try:
+        ws_response = supabase.table('workspaces').select('name').eq('id', workspace_id).eq('user_id', user.id).execute()
+        if not ws_response.data:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+        workspace_name = ws_response.data[0]['name']
+
+        insights_response = supabase.table('research_insights').select('*').eq('workspace_id', workspace_id).order('created_at', desc=False).execute()
+        insights = insights_response.data
+        if not insights or len(insights) == 0:
+            raise HTTPException(status_code=400, detail="No insights found to export.")
+
+        pdf_stream = report_generator.generate_pdf(workspace_name, insights)
+        headers = {'Content-Disposition': f'attachment; filename="{workspace_name.replace(" ", "_")}_Literature_Review.pdf"'}
+        return StreamingResponse(
+            pdf_stream, 
+            media_type="application/pdf", 
+            headers=headers
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF Export failed: {str(e)}")

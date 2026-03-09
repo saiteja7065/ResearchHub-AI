@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Bot, User, Sparkles, BookOpen, Loader2, ChevronDown } from "lucide-react";
+import { Send, Bot, User, Sparkles, BookOpen, Loader2, ChevronDown, Mic, MicOff } from "lucide-react";
 import { fetchApi } from "../lib/api";
 import { useAuth } from "../store/AuthContext";
 import { supabase } from "../lib/supabase";
@@ -24,8 +24,87 @@ export default function AIAgentsView() {
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
+    const [isListening, setIsListening] = useState(false);
+    const recognitionRef = useRef<any>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+        // Try to get the SpeechRecognition constructor
+        const SpeechRecognitionConstructor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+        if (SpeechRecognitionConstructor) {
+            try {
+                const recognition = new SpeechRecognitionConstructor();
+                recognition.continuous = true;
+                recognition.interimResults = true;
+                // Set language explicitly just in case
+                recognition.lang = 'en-US';
+
+                recognition.onresult = (event: any) => {
+                    let finalTranscript = '';
+                    let interimTranscript = '';
+
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        if (event.results[i].isFinal) {
+                            finalTranscript += event.results[i][0].transcript;
+                        } else {
+                            interimTranscript += event.results[i][0].transcript;
+                        }
+                    }
+
+                    // Append to existing input, or replace if we are starting fresh
+                    setInput((prevInput) => {
+                        // If we just started listening, maybe overwrite. Otherwise, concatenate safely.
+                        // But for simplicity of dictation, we just take the current full sentence.
+                        return finalTranscript + interimTranscript;
+                    });
+
+                    if (textareaRef.current) {
+                        textareaRef.current.style.height = "auto";
+                        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
+                    }
+                };
+
+                recognition.onerror = (event: any) => {
+                    console.error("Speech recognition error:", event.error);
+                    if (event.error !== 'no-speech') {
+                        setIsListening(false);
+                    }
+                };
+
+                recognition.onend = () => {
+                    // It naturally ends sometimes, turn off UI state
+                    setIsListening(false);
+                };
+
+                recognitionRef.current = recognition;
+            } catch (err) {
+                console.error("Failed to initialize Speech Recognition:", err);
+            }
+        }
+
+        return () => {
+            if (recognitionRef.current) {
+                recognitionRef.current.stop();
+            }
+        };
+    }, []);
+
+    const toggleListening = () => {
+        if (isListening) {
+            recognitionRef.current?.stop();
+            setIsListening(false);
+        } else {
+            if (recognitionRef.current) {
+                setInput("");
+                recognitionRef.current.start();
+                setIsListening(true);
+            } else {
+                alert("Speech recognition is not supported in this browser. Try Chrome or Edge.");
+            }
+        }
+    };
 
     useEffect(() => {
         if (user) fetchWorkspaces();
@@ -259,11 +338,22 @@ export default function AIAgentsView() {
                             value={input}
                             onChange={handleTextareaChange}
                             onKeyDown={handleKeyDown}
-                            placeholder={selectedWorkspace ? `Ask about "${selectedWorkspace.name}"…` : "Select a workspace first"}
+                            placeholder={selectedWorkspace ? (isListening ? "Listening..." : `Ask about "${selectedWorkspace.name}"…`) : "Select a workspace first"}
                             disabled={!selectedWorkspace}
                             rows={1}
                             className="flex-1 bg-transparent text-white placeholder-white/25 text-sm resize-none outline-none max-h-36 disabled:opacity-40"
                         />
+                        <button
+                            onClick={toggleListening}
+                            disabled={!selectedWorkspace || isLoading}
+                            title="Voice Dictation"
+                            className={`w-8 h-8 flex-shrink-0 rounded-lg flex items-center justify-center transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed ${isListening
+                                ? "bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.3)] border border-rose-500/30"
+                                : "bg-white/5 border border-transparent hover:border-white/10 hover:bg-white/10 text-white/70 hover:text-white"
+                                }`}
+                        >
+                            {isListening ? <MicOff size={14} className={isListening ? "animate-pulse" : ""} /> : <Mic size={14} />}
+                        </button>
                         <button
                             onClick={sendMessage}
                             disabled={!input.trim() || !selectedWorkspace || isLoading}

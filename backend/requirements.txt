@@ -12,3 +12,5 @@ httpx==0.25.2
 pydantic==2.4.2
 pydantic-settings==2.0.3
 python-jose[cryptography]==3.3.0
+python-pptx
+reportlab
