@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import workspaces, chat
+from routers import workspaces, chat, papers
 
 app = FastAPI(title="ResearchHub AI Backend")
 
@@ -16,6 +16,7 @@ app.add_middleware(
 # Include Routers
 app.include_router(workspaces.router)
 app.include_router(chat.router)
+app.include_router(papers.router)
 
 @app.get("/")
 def read_root():

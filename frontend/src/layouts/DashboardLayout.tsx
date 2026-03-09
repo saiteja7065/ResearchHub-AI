@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, Navigate } from "react-router-dom";
-import { BookOpen, Search, Settings, PanelLeft, Bot, ExternalLink, LogOut } from "lucide-react";
+import { BookOpen, Search, Settings, PanelLeft, Bot, ExternalLink, LogOut, Zap } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useAuth } from "../store/AuthContext";
 import { supabase } from "../lib/supabase";
@@ -29,7 +29,8 @@ export default function DashboardLayout() {
     const navItems = [
         { icon: BookOpen, label: "Workspaces", href: "/dashboard" },
         { icon: Bot, label: "AI Agents", href: "/dashboard/agents" },
-        { icon: Search, label: "Discover", href: "/dashboard/discover" },
+        { icon: Search, label: "Search Papers", href: "/dashboard/search-papers" },
+        { icon: Zap, label: "AI Tools", href: "/dashboard/ai-tools" },
         { icon: Settings, label: "Settings", href: "/dashboard/settings" },
     ];
 

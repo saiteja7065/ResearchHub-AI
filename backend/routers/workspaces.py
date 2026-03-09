@@ -19,6 +19,25 @@ async def get_workspaces(user=Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/stats")
+async def get_dashboard_stats(user=Depends(get_current_user)):
+    """Return dashboard stats: workspace count, papers imported, recent activity"""
+    try:
+        ws_resp = supabase.table('workspaces').select('id, name, created_at').eq('user_id', user.id).execute()
+        workspaces = ws_resp.data or []
+
+        papers_resp = supabase.table('papers').select('id', count='exact').eq('user_id', user.id).execute()
+        papers_count = papers_resp.count or 0
+
+        return {
+            "workspace_count": len(workspaces),
+            "papers_imported": papers_count,
+            "recent_workspaces": workspaces[-3:][::-1],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/")
 async def create_workspace(name: str = Form(...), description: str = Form(""), user=Depends(get_current_user)):
     """Create a new workspace"""
@@ -31,6 +50,26 @@ async def create_workspace(name: str = Form(...), description: str = Form(""), u
         return {"data": response.data[0]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{workspace_id}/papers")
+async def get_workspace_papers(workspace_id: str, user=Depends(get_current_user)):
+    """Fetch all papers (uploaded or imported) for a specific workspace"""
+    try:
+        # Verify workspace belongs to user
+        ws = supabase.table("workspaces").select("id").eq("id", workspace_id).eq("user_id", user.id).execute()
+        if not ws.data:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+
+        papers = supabase.table("papers").select(
+            "id, title, original_filename, metadata, created_at"
+        ).eq("workspace_id", workspace_id).order("created_at", desc=True).execute()
+
+        return {"papers": papers.data or []}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/{workspace_id}/upload")
 async def upload_document(
