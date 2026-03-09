@@ -9,10 +9,12 @@ load_dotenv()
 class ChatAgentService:
     def __init__(self):
         self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        self.model = "llama-3.1-8b-instant"
+        self.model = "llama-3.3-70b-versatile"
 
-    def _search_context(self, workspace_id: str, query: str, top_k: int = 5) -> List[str]:
+    def _search_context(self, workspace_id: str, query: str, top_k: int = 5, paper_id: Optional[str] = None) -> List[str]:
         """Search Qdrant for relevant document chunks based on the user's query."""
+        import numpy as np
+        from qdrant_client.http import models
         import numpy as np
         collection_name = f"workspace_{workspace_id.replace('-', '_')}"
         
@@ -25,10 +27,22 @@ class ChatAgentService:
         # Encode the query
         query_embedding = vector_db.model.encode([query])[0]
 
-        # Search in Qdrant
+        # Search in Qdrant with optional metadata filtering by paper_id
+        query_filter = None
+        if paper_id:
+            query_filter = models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="paper_id",
+                        match=models.MatchValue(value=paper_id)
+                    )
+                ]
+            )
+
         results = vector_db.qdrant.search(
             collection_name=collection_name,
             query_vector=query_embedding.tolist(),
+            query_filter=query_filter,
             limit=top_k,
         )
 
@@ -39,6 +53,7 @@ class ChatAgentService:
         workspace_id: str,
         user_message: str,
         chat_history: Optional[List[Dict[str, str]]] = None,
+        paper_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Main chat method:
@@ -47,7 +62,7 @@ class ChatAgentService:
         3. Calls Groq Llama 3 for a response
         """
         # 1. Retrieve relevant document chunks (truncate to avoid 413 payload too large errors)
-        context_chunks = self._search_context(workspace_id, user_message)
+        context_chunks = self._search_context(workspace_id, user_message, paper_id=paper_id)
         # Safely truncate chunks to a max of ~1000 chars each (approx 250 tokens) to ensure they fit in 8k limit
         truncated_chunks = [chunk[:1000] + "..." if len(chunk) > 1000 else chunk for chunk in context_chunks]
         context_text = "\\n\\n---\\n\\n".join(truncated_chunks) if truncated_chunks else "No relevant documents found in this workspace."

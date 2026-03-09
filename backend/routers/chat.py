@@ -15,6 +15,7 @@ class ChatRequest(BaseModel):
     workspace_id: str
     message: str
     history: Optional[List[ChatMessage]] = []
+    paper_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -39,7 +40,8 @@ async def chat_with_agent(
             workspace_id=request.workspace_id,
             user_message=request.message,
             chat_history=history,
-            user_id=user.id
+            user_id=user.id,
+            paper_id=request.paper_id
         )
         
         return ChatResponse(**result)

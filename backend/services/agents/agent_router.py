@@ -20,7 +20,7 @@ class AgentRouter:
     """
     def __init__(self):
         self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        self.model = "llama-3.1-8b-instant"
+        self.model = "llama-3.3-70b-versatile"
 
     def route_query(self, user_message: str, chat_history: Optional[List[Dict[str, str]]] = None) -> AgentType:
         """Uses a quick LLM call to classify the intent of the user's query."""
@@ -42,7 +42,7 @@ Output ONLY the exact string from the list above, nothing else."""
 
         try:
             completion = self.client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="llama-3.3-70b-versatile",
                 messages=messages,
                 temperature=0.0, # Deterministic routing
                 max_tokens=20,
@@ -61,7 +61,7 @@ Output ONLY the exact string from the list above, nothing else."""
             print(f"Routing failed, defaulting to GENERAL_CHAT: {e}")
             return AgentType.GENERAL_CHAT
 
-    def chat(self, workspace_id: str, user_message: str, chat_history: Optional[List[Dict[str, str]]] = None, user_id: str = None) -> Dict[str, Any]:
+    def chat(self, workspace_id: str, user_message: str, chat_history: Optional[List[Dict[str, str]]] = None, user_id: str = None, paper_id: Optional[str] = None) -> Dict[str, Any]:
         """
         The main entrypoint for the multi-agent system.
         Classifies the query and executes the specific agent pipeline.
@@ -84,6 +84,6 @@ Output ONLY the exact string from the list above, nothing else."""
             return gap_detection_agent.run(workspace_id, user_message, chat_history, user_id)
         
         else: # Fallback to standard contextual RAG chat
-            return chat_agent.chat(workspace_id, user_message, chat_history)
+            return chat_agent.chat(workspace_id=workspace_id, user_message=user_message, chat_history=chat_history, paper_id=paper_id)
 
 agent_router = AgentRouter()

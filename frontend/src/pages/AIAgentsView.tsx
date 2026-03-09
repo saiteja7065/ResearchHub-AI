@@ -16,6 +16,11 @@ interface Workspace {
     name: string;
 }
 
+interface Paper {
+    id: string;
+    title: string;
+}
+
 export default function AIAgentsView() {
     const { user } = useAuth();
     const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -23,7 +28,14 @@ export default function AIAgentsView() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+
+    // Dropdown states
     const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
+
+    // Paper selector states
+    const [papers, setPapers] = useState<Paper[]>([]);
+    const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null);
+    const [showPaperDropdown, setShowPaperDropdown] = useState(false);
     const [isListening, setIsListening] = useState(false);
     const recognitionRef = useRef<any>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -111,6 +123,15 @@ export default function AIAgentsView() {
     }, [user]);
 
     useEffect(() => {
+        if (selectedWorkspace) {
+            fetchPapers(selectedWorkspace.id);
+            setSelectedPaper(null); // Reset when changing workspace
+        } else {
+            setPapers([]);
+        }
+    }, [selectedWorkspace]);
+
+    useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
@@ -120,6 +141,13 @@ export default function AIAgentsView() {
             setWorkspaces(data);
             if (data.length > 0) setSelectedWorkspace(data[0]);
         }
+    };
+
+    const fetchPapers = async (workspaceId: string) => {
+        const { data } = await supabase.from("papers")
+            .select("id, title")
+            .eq("workspace_id", workspaceId);
+        if (data) setPapers(data);
     };
 
     const sendMessage = async () => {
@@ -134,13 +162,18 @@ export default function AIAgentsView() {
         if (textareaRef.current) textareaRef.current.style.height = "auto";
 
         try {
+            const bodyPayload: any = {
+                workspace_id: selectedWorkspace.id,
+                message: userMessage.content,
+                history: messages.map((m) => ({ role: m.role, content: m.content })),
+            };
+            if (selectedPaper) {
+                bodyPayload.paper_id = selectedPaper.id;
+            }
+
             const res = await fetchApi("/chat/", {
                 method: "POST",
-                body: JSON.stringify({
-                    workspace_id: selectedWorkspace.id,
-                    message: userMessage.content,
-                    history: messages.map((m) => ({ role: m.role, content: m.content })),
-                }),
+                body: JSON.stringify(bodyPayload),
             }) as unknown as { response: string; context_used: number; model: string };
 
             setMessages([
@@ -296,6 +329,7 @@ export default function AIAgentsView() {
                                         <p className="text-purple-400/60 text-xs mt-2 flex items-center gap-1">
                                             <BookOpen size={10} />
                                             Based on {msg.contextUsed} document chunk{msg.contextUsed !== 1 ? "s" : ""}
+                                            {selectedPaper ? ` from "${selectedPaper.title}"` : ""}
                                         </p>
                                     )}
                                 </div>
@@ -330,15 +364,73 @@ export default function AIAgentsView() {
                     <div ref={messagesEndRef} />
                 </div>
 
-                {/* Input */}
-                <div className="px-6 py-4 border-t border-white/5">
+                {/* Input Area */}
+                <div className="px-6 py-4 border-t border-white/5 relative">
+
+                    {/* Paper Context Selector */}
+                    {selectedWorkspace && papers.length > 0 && (
+                        <div className="absolute -top-12 left-6 z-10">
+                            <button
+                                onClick={() => setShowPaperDropdown(!showPaperDropdown)}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${selectedPaper
+                                        ? "bg-purple-500/10 border-purple-500/30 text-purple-300"
+                                        : "bg-white/5 hover:bg-white/10 border-white/10 text-white/50"
+                                    }`}
+                            >
+                                <BookOpen size={12} />
+                                <span className="max-w-[200px] truncate">
+                                    {selectedPaper ? selectedPaper.title : "All Workspace Documents"}
+                                </span>
+                                <ChevronDown size={12} className={`transition-transform ${showPaperDropdown ? "rotate-180" : ""}`} />
+                            </button>
+
+                            <AnimatePresence>
+                                {showPaperDropdown && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 5 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: 5 }}
+                                        className="absolute left-0 bottom-full mb-2 w-72 bg-[#1a1a24] border border-white/10 rounded-xl shadow-2xl overflow-hidden"
+                                    >
+                                        <button
+                                            onClick={() => {
+                                                setSelectedPaper(null);
+                                                setShowPaperDropdown(false);
+                                            }}
+                                            className={`w-full text-left px-4 py-3 text-sm hover:bg-white/5 transition-colors ${!selectedPaper ? "text-purple-400" : "text-white/70"}`}
+                                        >
+                                            All Workspace Documents
+                                        </button>
+                                        <div className="h-px bg-white/5 my-1" />
+                                        <div className="max-h-60 overflow-y-auto">
+                                            {papers.map((paper) => (
+                                                <button
+                                                    key={paper.id}
+                                                    onClick={() => {
+                                                        setSelectedPaper(paper);
+                                                        setShowPaperDropdown(false);
+                                                    }}
+                                                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 transition-colors truncate ${selectedPaper?.id === paper.id ? "text-purple-400" : "text-white/70"}`}
+                                                    title={paper.title}
+                                                >
+                                                    {paper.title}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+                    )}
+
+                    {/* Chat Input Box */}
                     <div className="flex items-end gap-3 bg-white/5 border border-white/10 rounded-2xl px-4 py-3 focus-within:border-purple-500/50 transition-colors">
                         <textarea
                             ref={textareaRef}
                             value={input}
                             onChange={handleTextareaChange}
                             onKeyDown={handleKeyDown}
-                            placeholder={selectedWorkspace ? (isListening ? "Listening..." : `Ask about "${selectedWorkspace.name}"…`) : "Select a workspace first"}
+                            placeholder={selectedWorkspace ? (isListening ? "Listening..." : `Ask about "${selectedPaper ? selectedPaper.title : selectedWorkspace.name}"…`) : "Select a workspace first"}
                             disabled={!selectedWorkspace}
                             rows={1}
                             className="flex-1 bg-transparent text-white placeholder-white/25 text-sm resize-none outline-none max-h-36 disabled:opacity-40"

@@ -6,7 +6,7 @@ from sentence_transformers import SentenceTransformer
 
 class VectorDBService:
     def __init__(self):
-        # Using memory natively for fast local development, will switch to cloud/disk in production
+        # Using memory natively for fast local development to prevent RocksDB file lock deadlocks
         self.qdrant = QdrantClient(":memory:")
         
         # Fast, lightweight embedding model perfect for semantic search MVPs
