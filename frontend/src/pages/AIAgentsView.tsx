@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Bot, User, Sparkles, BookOpen, Loader2, ChevronDown, Mic, MicOff } from "lucide-react";
-import { fetchApi } from "../lib/api";
+import { fetchApi, API_BASE_URL } from "../lib/api";
 import { useAuth } from "../store/AuthContext";
 import { supabase } from "../lib/supabase";
 import InsightsPanel from "../components/InsightsPanel";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 interface Message {
     role: "user" | "assistant";
     content: string;
@@ -28,6 +30,7 @@ export default function AIAgentsView() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+    const [isStreaming, setIsStreaming] = useState(false);
 
     // Dropdown states
     const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
@@ -171,19 +174,67 @@ export default function AIAgentsView() {
                 bodyPayload.paper_id = selectedPaper.id;
             }
 
-            const res = await fetchApi("/chat/", {
-                method: "POST",
-                body: JSON.stringify(bodyPayload),
-            }) as unknown as { response: string; context_used: number; model: string };
+            // Get auth token for the streaming request
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
 
-            setMessages([
-                ...newMessages,
-                {
-                    role: "assistant",
-                    content: res.response,
-                    contextUsed: res.context_used,
+            const response = await fetch(`${API_BASE_URL}/chat/stream`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { "Authorization": `Bearer ${token}` } : {}),
                 },
-            ]);
+                body: JSON.stringify(bodyPayload),
+            });
+
+            if (!response.ok || !response.body) {
+                throw new Error("Stream failed");
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let assistantContent = "";
+            let contextUsed = 0;
+
+            const streamingMessages = [...newMessages, { role: "assistant" as const, content: "", contextUsed: 0 }];
+            setMessages(streamingMessages);
+            setIsLoading(false);
+            setIsStreaming(true);
+
+            let buffer = "";
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n");
+                buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+                for (const line of lines) {
+                    if (!line.startsWith("data: ")) continue;
+                    try {
+                        const data = JSON.parse(line.slice(6));
+
+                        if (data.context_used !== undefined) {
+                            contextUsed = data.context_used;
+                        } else if (data.token) {
+                            assistantContent += data.token;
+                            setMessages([
+                                ...newMessages,
+                                { role: "assistant", content: assistantContent, contextUsed },
+                            ]);
+                        } else if (data.done) {
+                            // Final update with complete content
+                            setMessages([
+                                ...newMessages,
+                                { role: "assistant", content: assistantContent, contextUsed },
+                            ]);
+                        }
+                    } catch {
+                        // Skip malformed JSON lines
+                    }
+                }
+            }
         } catch {
             setMessages([
                 ...newMessages,
@@ -194,6 +245,7 @@ export default function AIAgentsView() {
             ]);
         } finally {
             setIsLoading(false);
+            setIsStreaming(false);
         }
     };
 
@@ -324,7 +376,18 @@ export default function AIAgentsView() {
                                         : "bg-white/5 border border-white/8 text-white/85 rounded-tl-sm"
                                         }`}
                                 >
-                                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                                    {msg.role === "assistant" ? (
+                                        <div className="prose-chat">
+                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                                {msg.content}
+                                            </ReactMarkdown>
+                                            {isStreaming && i === messages.length - 1 && (
+                                                <span className="inline-block w-2 h-4 bg-purple-400 ml-0.5 animate-pulse rounded-sm" />
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                                    )}
                                     {msg.role === "assistant" && msg.contextUsed !== undefined && msg.contextUsed > 0 && (
                                         <p className="text-purple-400/60 text-xs mt-2 flex items-center gap-1">
                                             <BookOpen size={10} />
@@ -373,8 +436,8 @@ export default function AIAgentsView() {
                             <button
                                 onClick={() => setShowPaperDropdown(!showPaperDropdown)}
                                 className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${selectedPaper
-                                        ? "bg-purple-500/10 border-purple-500/30 text-purple-300"
-                                        : "bg-white/5 hover:bg-white/10 border-white/10 text-white/50"
+                                    ? "bg-purple-500/10 border-purple-500/30 text-purple-300"
+                                    : "bg-white/5 hover:bg-white/10 border-white/10 text-white/50"
                                     }`}
                             >
                                 <BookOpen size={12} />

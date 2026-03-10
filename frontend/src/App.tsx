@@ -7,6 +7,7 @@ import AIAgentsView from "./pages/AIAgentsView";
 import AuthPage from "./pages/AuthPage";
 import SearchPapersView from "./pages/SearchPapersView";
 import AIToolsView from "./pages/AIToolsView";
+import SettingsView from "./pages/SettingsView";
 import { AuthProvider } from "./store/AuthContext";
 
 export default function App() {
@@ -23,6 +24,7 @@ export default function App() {
             <Route path="agents" element={<AIAgentsView />} />
             <Route path="search-papers" element={<SearchPapersView />} />
             <Route path="ai-tools" element={<AIToolsView />} />
+            <Route path="settings" element={<SettingsView />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

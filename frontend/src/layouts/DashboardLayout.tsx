@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, Navigate } from "react-router-dom";
-import { BookOpen, Search, Settings, PanelLeft, Bot, ExternalLink, LogOut, Zap } from "lucide-react";
+import { BookOpen, Search, Settings, PanelLeft, Bot, LogOut, Zap } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useAuth } from "../store/AuthContext";
 import { supabase } from "../lib/supabase";
@@ -96,15 +96,15 @@ export default function DashboardLayout() {
                         <PanelLeft className="w-5 h-5" />
                     </button>
 
-                    <div className="flex items-center gap-4 ml-auto">
-                        <button className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors hidden sm:block">
-                            Documentation
-                            <ExternalLink className="w-3 h-3 inline-block ml-1 mb-1" />
-                        </button>
-                        <div className="h-4 w-px bg-border hidden sm:block"></div>
-                        <button className="px-3 py-1.5 text-xs font-semibold text-primary-foreground bg-primary rounded-full hover:bg-primary/90 transition-all">
-                            Upgrade
-                        </button>
+                    <h1 className="text-lg font-semibold text-foreground hidden md:block">
+                        {navItems.find(item => location.pathname === item.href)?.label || "Dashboard"}
+                    </h1>
+
+                    <div className="flex items-center gap-3 ml-auto">
+                        <span className="text-sm text-muted-foreground hidden sm:block">{user?.email}</span>
+                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm uppercase">
+                            {user?.email?.charAt(0) || 'U'}
+                        </div>
                     </div>
                 </header>
 

@@ -100,12 +100,12 @@ async def search_papers(
     """
     results = []
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
 
         # ── arXiv Search ──────────────────────────────────────────────
         if source in ("arxiv", "all"):
             try:
-                arxiv_url = "http://export.arxiv.org/api/query"
+                arxiv_url = "https://export.arxiv.org/api/query"
                 params = {
                     "search_query": f"all:{query}",
                     "start": 0,
@@ -116,6 +116,8 @@ async def search_papers(
                 resp = await client.get(arxiv_url, params=params)
                 if resp.status_code == 200:
                     results.extend(parse_arxiv_results(resp.text))
+                else:
+                    print(f"arXiv returned status {resp.status_code}")
             except Exception as e:
                 print(f"arXiv search error: {e}")
 
@@ -192,7 +194,36 @@ async def import_paper(paper: dict, user=Depends(get_current_user)):
                 "imported_from_search": True
             }
         }).execute()
-        return {"message": "Paper imported successfully", "paper": response.data[0]}
+
+        imported_paper = response.data[0]
+
+        # ── Index into Qdrant for AI Agent RAG ──────────────────────
+        try:
+            from services.vector_db import vector_db
+
+            title = paper.get("title", "")
+            abstract = paper.get("abstract", "")
+            authors = ", ".join(paper.get("authors", []))
+
+            # Build synthetic text elements from metadata
+            elements = []
+            if title:
+                elements.append({"type": "Title", "text": title, "page_number": 0})
+            if authors:
+                elements.append({"type": "NarrativeText", "text": f"Authors: {authors}", "page_number": 0})
+            if abstract:
+                elements.append({"type": "NarrativeText", "text": abstract, "page_number": 0})
+
+            if elements:
+                vector_db.embed_and_store(
+                    workspace_id=workspace_id,
+                    paper_id=imported_paper["id"],
+                    elements=elements
+                )
+        except Exception as idx_err:
+            print(f"⚠️ Qdrant indexing for imported paper failed (non-fatal): {idx_err}")
+
+        return {"message": "Paper imported successfully", "paper": imported_paper}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
 

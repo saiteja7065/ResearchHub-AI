@@ -75,13 +75,13 @@ Output ONLY the exact string from the list above, nothing else."""
         from services.chat_agent import chat_agent
 
         if route == AgentType.SUMMARIZE:
-            return summarization_agent.run(workspace_id, user_message, chat_history, user_id)
+            return summarization_agent.run(workspace_id, user_message, chat_history, user_id, paper_id=paper_id)
         
         elif route == AgentType.CONTRADICTION:
-            return contradiction_agent.run(workspace_id, user_message, chat_history, user_id)
+            return contradiction_agent.run(workspace_id, user_message, chat_history, user_id, paper_id=paper_id)
         
         elif route == AgentType.GAP_DETECTION:
-            return gap_detection_agent.run(workspace_id, user_message, chat_history, user_id)
+            return gap_detection_agent.run(workspace_id, user_message, chat_history, user_id, paper_id=paper_id)
         
         else: # Fallback to standard contextual RAG chat
             return chat_agent.chat(workspace_id=workspace_id, user_message=user_message, chat_history=chat_history, paper_id=paper_id)

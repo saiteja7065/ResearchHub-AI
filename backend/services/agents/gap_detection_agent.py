@@ -9,11 +9,11 @@ class GapDetectionAgent:
         self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
         self.model = "llama-3.3-70b-versatile"
 
-    def run(self, workspace_id: str, user_message: str, chat_history: Optional[List[Dict[str, str]]] = None, user_id: str = None) -> Dict[str, Any]:
-        print("Running GapDetectionAgent...")
+    def run(self, workspace_id: str, user_message: str, chat_history: Optional[List[Dict[str, str]]] = None, user_id: str = None, paper_id: Optional[str] = None) -> Dict[str, Any]:
+        print(f"Running GapDetectionAgent... (paper_id={paper_id})")
         
-        # 1. Retrieve relevant context
-        context_chunks = chat_agent._search_context(workspace_id, user_message, top_k=10)
+        # 1. Retrieve relevant context (filtered by paper_id if specified)
+        context_chunks = chat_agent._search_context(workspace_id, user_message, top_k=10, paper_id=paper_id)
         truncated_chunks = [chunk[:1000] + "..." if len(chunk) > 1000 else chunk for chunk in context_chunks]
         context_text = "\\n\\n---\\n\\n".join(truncated_chunks) if truncated_chunks else "No relevant documents found."
         

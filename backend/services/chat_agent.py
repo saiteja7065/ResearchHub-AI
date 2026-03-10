@@ -1,8 +1,9 @@
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Generator
 from dotenv import load_dotenv
 from groq import Groq
 from services.vector_db import vector_db
+import json
 
 load_dotenv()
 
@@ -48,26 +49,12 @@ class ChatAgentService:
 
         return [hit.payload.get("text", "") for hit in results if hit.payload]
 
-    def chat(
-        self,
-        workspace_id: str,
-        user_message: str,
-        chat_history: Optional[List[Dict[str, str]]] = None,
-        paper_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        Main chat method:
-        1. Retrieves relevant context from Qdrant (RAG)
-        2. Builds a prompt with the context
-        3. Calls Groq Llama 3 for a response
-        """
-        # 1. Retrieve relevant document chunks (truncate to avoid 413 payload too large errors)
+    def _build_messages(self, workspace_id: str, user_message: str, chat_history: Optional[List[Dict[str, str]]] = None, paper_id: Optional[str] = None):
+        """Shared helper to build context + messages for both chat() and chat_stream()."""
         context_chunks = self._search_context(workspace_id, user_message, paper_id=paper_id)
-        # Safely truncate chunks to a max of ~1000 chars each (approx 250 tokens) to ensure they fit in 8k limit
         truncated_chunks = [chunk[:1000] + "..." if len(chunk) > 1000 else chunk for chunk in context_chunks]
         context_text = "\\n\\n---\\n\\n".join(truncated_chunks) if truncated_chunks else "No relevant documents found in this workspace."
 
-        # 2. Build the system prompt with context
         system_prompt = f"""You are ResearchHub AI, an expert research assistant. You help users analyze and understand academic papers and research documents that have been uploaded to their workspace.
 
 You have access to the following relevant excerpts from the user's research documents:
@@ -83,15 +70,28 @@ Instructions:
 - When citing information, mention it comes from the uploaded documents.
 - Format your responses with clear structure when needed (bullet points, numbered lists, etc.)"""
 
-        # 3. Build message history for multi-turn conversation
         messages = [{"role": "system", "content": system_prompt}]
-        
         if chat_history:
-            messages.extend(chat_history[-10:])  # Keep last 10 turns for context window
-        
+            messages.extend(chat_history[-10:])
         messages.append({"role": "user", "content": user_message})
 
-        # 4. Call Groq API
+        return messages, len(context_chunks)
+
+    def chat(
+        self,
+        workspace_id: str,
+        user_message: str,
+        chat_history: Optional[List[Dict[str, str]]] = None,
+        paper_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Main chat method (non-streaming):
+        1. Retrieves relevant context from Qdrant (RAG)
+        2. Builds a prompt with the context
+        3. Calls Groq Llama 3 for a response
+        """
+        messages, context_used = self._build_messages(workspace_id, user_message, chat_history, paper_id)
+
         completion = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
@@ -103,8 +103,42 @@ Instructions:
 
         return {
             "response": response_text,
-            "context_used": len(context_chunks),
+            "context_used": context_used,
             "model": self.model,
         }
 
+    def chat_stream(
+        self,
+        workspace_id: str,
+        user_message: str,
+        chat_history: Optional[List[Dict[str, str]]] = None,
+        paper_id: Optional[str] = None,
+    ) -> Generator[str, None, None]:
+        """
+        Streaming chat method:
+        Yields SSE-formatted events with tokens as they arrive from Groq.
+        """
+        messages, context_used = self._build_messages(workspace_id, user_message, chat_history, paper_id)
+
+        # Send context_used count as the first event
+        yield f"data: {json.dumps({'context_used': context_used})}\n\n"
+
+        # Stream tokens from Groq
+        stream = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=0.7,
+            max_tokens=1024,
+            stream=True,
+        )
+
+        for chunk in stream:
+            token = chunk.choices[0].delta.content
+            if token:
+                yield f"data: {json.dumps({'token': token})}\n\n"
+
+        # Final event to signal completion
+        yield f"data: {json.dumps({'done': True})}\n\n"
+
 chat_agent = ChatAgentService()
+
