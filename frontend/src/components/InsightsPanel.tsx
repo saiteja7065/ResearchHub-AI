@@ -156,7 +156,6 @@ export default function InsightsPanel({ workspaceId }: InsightsPanelProps) {
                     Findings continuously discovered by specialized AI agents.
                 </p>
 
-                {/* Filters */}
                 <div className="flex gap-2">
                     {(["all", "summary", "contradiction", "research_gap"] as const).map(t => (
                         <button
@@ -167,7 +166,7 @@ export default function InsightsPanel({ workspaceId }: InsightsPanelProps) {
                                 : "bg-transparent text-white/40 border-white/5 hover:text-white/70 hover:bg-white/5"
                                 }`}
                         >
-                            {t === "all" ? "All" : t.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
+                            {t === "all" ? "All" : t === "summary" ? "Summary / Pinned" : t.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
                         </button>
                     ))}
                 </div>

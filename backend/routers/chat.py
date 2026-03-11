@@ -95,3 +95,30 @@ async def get_workspace_insights(
         return {"data": response.data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch insights: {str(e)}")
+
+class PinMessageRequest(BaseModel):
+    workspace_id: str
+    content: str
+    
+@router.post("/pin")
+async def pin_chat_message(req: PinMessageRequest, user = Depends(get_current_user)):
+    """
+    Save a chat message as a 'pinned note' in the Autonomous Insights panel.
+    """
+    # 1. Verify user owns the workspace
+    ws = supabase.table("workspaces").select("id").eq("id", req.workspace_id).eq("user_id", user.id).execute()
+    if not ws.data:
+        raise HTTPException(status_code=403, detail="Workspace access denied or not found")
+
+    # 2. Insert into research_insights as a summary with pinned prefix
+    try:
+        pinned_content = f"📌 **Pinned Note:**\n\n{req.content}"
+        res = supabase.table("research_insights").insert({
+            "workspace_id": req.workspace_id,
+            "type": "summary",
+            "content": pinned_content
+        }).execute()
+        
+        return {"status": "success", "insight": res.data[0] if res.data else None}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to pin message: {str(e)}")

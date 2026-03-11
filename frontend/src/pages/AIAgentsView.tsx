@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Bot, User, Sparkles, BookOpen, Loader2, ChevronDown, Mic, MicOff } from "lucide-react";
+import { Send, Bot, User, Sparkles, BookOpen, Loader2, ChevronDown, Mic, MicOff, Pin } from "lucide-react";
 import { fetchApi, API_BASE_URL } from "../lib/api";
 import { useAuth } from "../store/AuthContext";
 import { supabase } from "../lib/supabase";
@@ -40,6 +40,7 @@ export default function AIAgentsView() {
     const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null);
     const [showPaperDropdown, setShowPaperDropdown] = useState(false);
     const [isListening, setIsListening] = useState(false);
+    const [pinnedMessages, setPinnedMessages] = useState<Set<number>>(new Set());
     const recognitionRef = useRef<any>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -249,6 +250,47 @@ export default function AIAgentsView() {
         }
     };
 
+    const pinMessage = async (msgIndex: number, content: string) => {
+        if (!selectedWorkspace || !user) return;
+
+        // Optimistic UI update
+        setPinnedMessages(prev => new Set(prev).add(msgIndex));
+
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+
+            const response = await fetch(`${API_BASE_URL}/chat/pin`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({
+                    workspace_id: selectedWorkspace.id,
+                    content: content
+                }),
+            });
+
+            if (!response.ok) {
+                console.error("Failed to pin message. Server responded with:", response.status);
+                // Revert UI on failure
+                setPinnedMessages(prev => {
+                    const newSet = new Set(prev);
+                    newSet.delete(msgIndex);
+                    return newSet;
+                });
+            }
+        } catch (err) {
+            console.error("Error pinning message:", err);
+            setPinnedMessages(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(msgIndex);
+                return newSet;
+            });
+        }
+    };
+
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
@@ -394,6 +436,21 @@ export default function AIAgentsView() {
                                             Based on {msg.contextUsed} document chunk{msg.contextUsed !== 1 ? "s" : ""}
                                             {selectedPaper ? ` from "${selectedPaper.title}"` : ""}
                                         </p>
+                                    )}
+                                    {msg.role === "assistant" && !isStreaming && (
+                                        <div className="mt-3 pt-3 border-t border-white/10 flex justify-end">
+                                            <button
+                                                onClick={() => pinMessage(i, msg.content)}
+                                                disabled={pinnedMessages.has(i)}
+                                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${pinnedMessages.has(i)
+                                                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                                    : "bg-white/5 hover:bg-white/10 text-white/50 hover:text-white/80 border border-white/10"
+                                                    }`}
+                                            >
+                                                <Pin size={12} className={pinnedMessages.has(i) ? "fill-emerald-400" : ""} />
+                                                {pinnedMessages.has(i) ? "Pinned to Insights" : "Pin to Insights"}
+                                            </button>
+                                        </div>
                                     )}
                                 </div>
 
