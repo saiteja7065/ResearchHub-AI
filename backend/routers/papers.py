@@ -87,73 +87,123 @@ def parse_pubmed_details(details_xml: str) -> list:
     return papers
 
 
+async def _search_arxiv(client: httpx.AsyncClient, query: str, limit: int) -> list:
+    results = []
+    try:
+        arxiv_url = "https://export.arxiv.org/api/query"
+        params = {
+            "search_query": f"all:{query}",
+            "start": 0,
+            "max_results": limit,
+            "sortBy": "relevance",
+            "sortOrder": "descending"
+        }
+        resp = await client.get(arxiv_url, params=params)
+        if resp.status_code == 200:
+            results.extend(parse_arxiv_results(resp.text))
+        else:
+            print(f"arXiv returned status {resp.status_code}")
+    except Exception as e:
+        print(f"arXiv search error: {e}")
+    return results
+
+async def _search_pubmed(client: httpx.AsyncClient, query: str, limit: int) -> list:
+    results = []
+    try:
+        esearch_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+        esearch_params = {
+            "db": "pubmed",
+            "term": query,
+            "retmax": limit,
+            "retmode": "xml",
+            "sort": "relevance",
+            "tool": "ResearchHubAI",
+            "email": "researchhub@ai.com"
+        }
+        id_resp = await client.get(esearch_url, params=esearch_params)
+        if id_resp.status_code == 200:
+            ids = parse_pubmed_ids(id_resp.text)
+            if ids:
+                efetch_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+                efetch_params = {
+                    "db": "pubmed",
+                    "id": ",".join(ids),
+                    "retmode": "xml",
+                    "rettype": "abstract",
+                    "tool": "ResearchHubAI",
+                    "email": "researchhub@ai.com"
+                }
+                detail_resp = await client.get(efetch_url, params=efetch_params)
+                if detail_resp.status_code == 200:
+                    results.extend(parse_pubmed_details(detail_resp.text))
+    except Exception as e:
+        print(f"PubMed search error: {e}")
+    return results
+
+async def _search_semantic(client: httpx.AsyncClient, query: str, limit: int) -> list:
+    results = []
+    try:
+        s2_url = "https://api.semanticscholar.org/graph/v1/paper/search"
+        s2_params = {
+            "query": query,
+            "limit": limit,
+            "fields": "title,authors,abstract,year,url,externalIds"
+        }
+        s2_resp = await client.get(s2_url, params=s2_params)
+        if s2_resp.status_code == 200:
+            data = s2_resp.json()
+            for item in data.get("data", []):
+                authors = [a.get("name") for a in item.get("authors", []) if a.get("name")][:5]
+                paper_url = item.get("url")
+                
+                results.append({
+                    "source": "Semantic Scholar",
+                    "external_id": item.get("paperId", ""),
+                    "title": item.get("title", "").strip() or "Untitled",
+                    "authors": authors,
+                    "abstract": (item.get("abstract") or "").strip()[:500] if item.get("abstract") else "No abstract available.",
+                    "published_date": str(item.get("year", "")),
+                    "url": paper_url if paper_url else f"https://www.semanticscholar.org/paper/{item.get('paperId')}",
+                })
+        else:
+            print(f"Semantic Scholar returned status {s2_resp.status_code}")
+    except Exception as e:
+        print(f"Semantic Scholar search error: {e}")
+    return results
+
 @router.get("/search")
 async def search_papers(
     query: str = Query(..., min_length=2),
-    source: Optional[str] = Query("all", description="arxiv | pubmed | all"),
+    source: Optional[str] = Query("all", description="arxiv | pubmed | semantic_scholar | all"),
     limit: int = Query(10, le=20),
     user=Depends(get_current_user)
 ):
     """
-    Search academic papers from arXiv, PubMed, or both.
-    Returns a unified list of paper metadata.
+    Search academic papers from arXiv, PubMed, Semantic Scholar, or all.
+    Runs queries concurrently for dramatically lower latency.
     """
+    import asyncio
+    
     results = []
-
-    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
-
-        # ── arXiv Search ──────────────────────────────────────────────
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}) as client:
+        
+        tasks = []
         if source in ("arxiv", "all"):
-            try:
-                arxiv_url = "https://export.arxiv.org/api/query"
-                params = {
-                    "search_query": f"all:{query}",
-                    "start": 0,
-                    "max_results": limit,
-                    "sortBy": "relevance",
-                    "sortOrder": "descending"
-                }
-                resp = await client.get(arxiv_url, params=params)
-                if resp.status_code == 200:
-                    results.extend(parse_arxiv_results(resp.text))
-                else:
-                    print(f"arXiv returned status {resp.status_code}")
-            except Exception as e:
-                print(f"arXiv search error: {e}")
-
-        # ── PubMed Search ─────────────────────────────────────────────
+            tasks.append(_search_arxiv(client, query, limit))
         if source in ("pubmed", "all"):
-            try:
-                # Step 1: esearch to get IDs
-                esearch_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
-                esearch_params = {
-                    "db": "pubmed",
-                    "term": query,
-                    "retmax": limit,
-                    "retmode": "xml",
-                    "sort": "relevance",
-                    "tool": "ResearchHubAI",
-                    "email": "researchhub@ai.com"
-                }
-                id_resp = await client.get(esearch_url, params=esearch_params)
-                if id_resp.status_code == 200:
-                    ids = parse_pubmed_ids(id_resp.text)
-                    if ids:
-                        # Step 2: efetch to get details
-                        efetch_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
-                        efetch_params = {
-                            "db": "pubmed",
-                            "id": ",".join(ids),
-                            "retmode": "xml",
-                            "rettype": "abstract",
-                            "tool": "ResearchHubAI",
-                            "email": "researchhub@ai.com"
-                        }
-                        detail_resp = await client.get(efetch_url, params=efetch_params)
-                        if detail_resp.status_code == 200:
-                            results.extend(parse_pubmed_details(detail_resp.text))
-            except Exception as e:
-                print(f"PubMed search error: {e}")
+            tasks.append(_search_pubmed(client, query, limit))
+        if source in ("semantic_scholar", "all"):
+            tasks.append(_search_semantic(client, query, limit))
+            
+        # Execute all API queries concurrently
+        completed_tasks = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Merge results
+        for task_result in completed_tasks:
+            if isinstance(task_result, Exception):
+                print(f"Concurrent execution caught exception: {task_result}")
+            elif isinstance(task_result, list):
+                results.extend(task_result)
 
     return {"results": results, "total": len(results), "query": query, "source": source}
 

@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional, Generator
 from dotenv import load_dotenv
 from groq import Groq
 from services.vector_db import vector_db
+from services.context_compressor import context_compressor
 import json
 
 load_dotenv()
@@ -40,14 +41,20 @@ class ChatAgentService:
                 ]
             )
 
+        # Retrieve a broader set of chunks for the compressor to evaluate
+        search_limit = max(15, top_k * 3)
         results = vector_db.qdrant.search(
             collection_name=collection_name,
             query_vector=query_embedding.tolist(),
             query_filter=query_filter,
-            limit=top_k,
+            limit=search_limit,
         )
 
-        return [hit.payload.get("text", "") for hit in results if hit.payload]
+        raw_chunks = [{"text": hit.payload.get("text", ""), "score": hit.score} for hit in results if hit.payload]
+        compressed_chunks = context_compressor.compress(raw_chunks)
+        
+        # Return up to top_k of the highest quality, deduplicated chunks
+        return compressed_chunks[:top_k]
 
     def _build_messages(self, workspace_id: str, user_message: str, chat_history: Optional[List[Dict[str, str]]] = None, paper_id: Optional[str] = None):
         """Shared helper to build context + messages for both chat() and chat_stream()."""

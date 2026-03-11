@@ -19,7 +19,7 @@ interface Paper {
 
 export default function SearchPapersView() {
     const [query, setQuery] = useState("");
-    const [source, setSource] = useState<"all" | "arxiv" | "pubmed">("all");
+    const [source, setSource] = useState<"all" | "arxiv" | "pubmed" | "semantic_scholar">("all");
     const [results, setResults] = useState<Paper[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [searched, setSearched] = useState(false);
@@ -71,6 +71,7 @@ export default function SearchPapersView() {
     const sourceColors: Record<string, string> = {
         "arXiv": "bg-blue-500/10 text-blue-400 border-blue-500/20",
         "PubMed": "bg-green-500/10 text-green-400 border-green-500/20",
+        "Semantic Scholar": "bg-purple-500/10 text-purple-400 border-purple-500/20",
     };
 
     return (
@@ -81,7 +82,7 @@ export default function SearchPapersView() {
                 <div>
                     <h1 className="text-3xl font-extrabold tracking-tight">Search Papers</h1>
                     <p className="text-muted-foreground mt-1 text-sm">
-                        Search and import papers from arXiv and PubMed databases into your workspaces.
+                        Search and import papers from arXiv, PubMed, and Semantic Scholar (215M+ papers).
                     </p>
                 </div>
 
@@ -98,8 +99,8 @@ export default function SearchPapersView() {
                     </div>
 
                     {/* Source Filter */}
-                    <div className="flex items-center gap-1 bg-card border border-border rounded-xl p-1">
-                        {(["all", "arxiv", "pubmed"] as const).map(s => (
+                    <div className="flex items-center gap-1 bg-card border border-border rounded-xl p-1 overflow-x-auto whitespace-nowrap">
+                        {(["all", "arxiv", "pubmed", "semantic_scholar"] as const).map(s => (
                             <button
                                 key={s}
                                 type="button"
@@ -110,7 +111,7 @@ export default function SearchPapersView() {
                                         : "text-muted-foreground hover:text-foreground hover:bg-secondary"
                                 }`}
                             >
-                                {s === "all" ? "All Sources" : s === "arxiv" ? "arXiv" : "PubMed"}
+                                {s === "all" ? "All Sources" : s === "arxiv" ? "arXiv" : s === "pubmed" ? "PubMed" : "Semantic Scholar"}
                             </button>
                         ))}
                     </div>
@@ -151,7 +152,7 @@ export default function SearchPapersView() {
                                 </p>
                                 {results.length > 0 && (
                                     <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                        <Filter className="w-3 h-3" /> {source === "all" ? "All Sources" : source === "arxiv" ? "arXiv" : "PubMed"}
+                                        <Filter className="w-3 h-3" /> {source === "all" ? "All Sources" : source === "arxiv" ? "arXiv" : source === "pubmed" ? "PubMed" : "Semantic Scholar"}
                                     </span>
                                 )}
                             </div>
@@ -276,8 +277,8 @@ export default function SearchPapersView() {
                             <Search className="w-7 h-7 text-primary/40" />
                         </div>
                         <p className="font-medium">Search Academic Databases</p>
-                        <p className="text-sm mt-1 max-w-xs">
-                            Enter a keyword or topic to search millions of papers from arXiv and PubMed.
+                        <p className="text-sm mt-1 max-w-sm">
+                            Enter a keyword or topic to search millions of papers from arXiv, PubMed, and Semantic Scholar.
                         </p>
                         <div className="flex gap-2 mt-4 flex-wrap justify-center">
                             {["transformer architecture", "CRISPR gene editing", "reinforcement learning", "cancer immunotherapy"].map(ex => (
