@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Bot, User, Sparkles, BookOpen, Loader2, ChevronDown, Mic, MicOff, Pin } from "lucide-react";
-import { fetchApi, API_BASE_URL } from "../lib/api";
+import { API_BASE_URL } from "../lib/api";
 import { useAuth } from "../store/AuthContext";
 import { supabase } from "../lib/supabase";
 import InsightsPanel from "../components/InsightsPanel";
@@ -70,7 +70,7 @@ export default function AIAgentsView() {
                     }
 
                     // Append to existing input, or replace if we are starting fresh
-                    setInput((prevInput) => {
+                    setInput(() => {
                         // If we just started listening, maybe overwrite. Otherwise, concatenate safely.
                         // But for simplicity of dictation, we just take the current full sentence.
                         return finalTranscript + interimTranscript;

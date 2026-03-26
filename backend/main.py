@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import workspaces, chat, papers
+from routers import workspaces, chat, papers, collaboration, comments
 
 app = FastAPI(title="ResearchHub AI Backend")
 
@@ -17,6 +17,8 @@ app.add_middleware(
 app.include_router(workspaces.router)
 app.include_router(chat.router)
 app.include_router(papers.router)
+app.include_router(collaboration.router)
+app.include_router(comments.router)
 
 @app.on_event("startup")
 async def startup_reindex_qdrant():

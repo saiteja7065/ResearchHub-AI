@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Folder, Loader2, ArrowRight, FolderOpen, FileText, Search, Zap } from 'lucide-react';
+import { Plus, Folder, Loader2, ArrowRight, FolderOpen, FileText, Search, Zap, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import { fetchApi } from '../lib/api';
@@ -227,8 +227,16 @@ export default function DashboardView() {
                                 >
                                     <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-bl-[100px] -z-10 group-hover:bg-primary/10 transition-colors" />
 
-                                    <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center text-foreground mb-4 group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300">
-                                        <Folder className="w-5 h-5" />
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center text-foreground group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300">
+                                            <Folder className="w-5 h-5" />
+                                        </div>
+                                        {workspace.shared_role && (
+                                            <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-500/10 text-blue-500 text-xs font-semibold rounded-md border border-blue-500/20">
+                                                <Users className="w-3.5 h-3.5" />
+                                                Shared
+                                            </div>
+                                        )}
                                     </div>
 
                                     <h3 className="text-lg font-bold text-foreground line-clamp-2 leading-tight mb-2 group-hover:text-primary transition-colors">

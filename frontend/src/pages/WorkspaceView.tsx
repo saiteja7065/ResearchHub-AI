@@ -3,9 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, Link } from 'react-router-dom';
 import {
     ArrowLeft, UploadCloud, FileText, Loader2, CheckCircle2,
-    AlertCircle, BookOpen, Calendar, Users, ExternalLink, Trash2
+    AlertCircle, BookOpen, Calendar, Users, ExternalLink, Trash2, Settings
 } from 'lucide-react';
 import { submitFormDataApi, fetchApi } from '../lib/api';
+import WorkspaceSettingsModal from '../components/WorkspaceSettingsModal';
+import CommentSection from '../components/CommentSection';
 
 interface Paper {
     id: string;
@@ -21,6 +23,7 @@ export default function WorkspaceView() {
     const [isDragging, setIsDragging] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadStatus, setUploadStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     // Papers list state
     const [papers, setPapers] = useState<Paper[]>([]);
@@ -99,15 +102,24 @@ export default function WorkspaceView() {
     return (
         <div className="max-w-6xl mx-auto space-y-8 p-6 md:p-8 h-full overflow-y-auto">
 
-            <div>
-                <Link to="/dashboard" className="inline-flex items-center text-sm font-medium text-muted-foreground hover:text-foreground mb-4 transition-colors">
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Back to Dashboard
-                </Link>
-                <h1 className="text-3xl font-extrabold tracking-tight">My Workspace</h1>
-                <p className="text-muted-foreground mt-1 text-sm md:text-base">
-                    Upload literature into this workspace to begin analysis.
-                </p>
+            <div className="flex items-start justify-between">
+                <div>
+                    <Link to="/dashboard" className="inline-flex items-center text-sm font-medium text-muted-foreground hover:text-foreground mb-4 transition-colors">
+                        <ArrowLeft className="w-4 h-4 mr-2" />
+                        Back to Dashboard
+                    </Link>
+                    <h1 className="text-3xl font-extrabold tracking-tight">My Workspace</h1>
+                    <p className="text-muted-foreground mt-1 text-sm md:text-base">
+                        Upload literature into this workspace to begin analysis.
+                    </p>
+                </div>
+                <button 
+                    onClick={() => setIsSettingsOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-secondary/80 hover:bg-secondary text-secondary-foreground rounded-xl text-sm font-medium transition-colors border border-border/80"
+                >
+                    <Settings className="w-4 h-4" />
+                    Settings
+                </button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -275,6 +287,19 @@ export default function WorkspaceView() {
                                                     </button>
                                                 </div>
                                             )}
+
+                                            <AnimatePresence>
+                                                {isExpanded && id && (
+                                                    <motion.div 
+                                                        initial={{ opacity: 0, height: 0 }} 
+                                                        animate={{ opacity: 1, height: 'auto' }} 
+                                                        exit={{ opacity: 0, height: 0 }}
+                                                        className="mt-6 h-[400px] overflow-hidden"
+                                                    >
+                                                        <CommentSection workspaceId={id} paperId={paper.id} />
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
                                         </motion.div>
                                     );
                                 })}
@@ -335,6 +360,15 @@ export default function WorkspaceView() {
                     </div>
                 </div>
             </div>
+
+            {id && (
+                <WorkspaceSettingsModal 
+                    isOpen={isSettingsOpen} 
+                    onClose={() => setIsSettingsOpen(false)} 
+                    workspaceId={id} 
+                    workspaceName="Workspace Configuration" 
+                />
+            )}
         </div>
     );
 }

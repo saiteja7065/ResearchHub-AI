@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-    Search, BookOpen, Download, Plus, Loader2,
+    Search, BookOpen, Plus, Loader2,
     ExternalLink, Calendar, Users, Filter, CheckCircle2
 } from "lucide-react";
 import { fetchApi } from "../lib/api";
@@ -29,8 +29,6 @@ export default function SearchPapersView() {
     const [importingId, setImportingId] = useState<string | null>(null);
     const [importedIds, setImportedIds] = useState<Set<string>>(new Set());
     const [showImportMenu, setShowImportMenu] = useState<string | null>(null);
-    const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>("");
-
     const { workspaces } = useWorkspaces();
 
     const handleSearch = async (e?: React.FormEvent) => {

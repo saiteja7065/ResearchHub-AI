@@ -6,6 +6,7 @@ export type Workspace = {
     name: string;
     description: string;
     created_at: string;
+    shared_role?: string;
 };
 
 export function useWorkspaces() {

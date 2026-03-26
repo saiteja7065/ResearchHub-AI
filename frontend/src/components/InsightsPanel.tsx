@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { fetchApi, API_BASE_URL } from "../lib/api";
 import { supabase } from "../lib/supabase";
-import { FileText, AlertTriangle, Target, Loader2, Clock, Download, FileDown, File } from "lucide-react";
+import { FileText, AlertTriangle, Target, Loader2, Clock, FileDown, File, MessageSquare } from "lucide-react";
+import CommentSection from "./CommentSection";
 
 interface Insight {
     id: string;
@@ -20,6 +21,7 @@ export default function InsightsPanel({ workspaceId }: InsightsPanelProps) {
     const [isLoading, setIsLoading] = useState(false);
     const [isExporting, setIsExporting] = useState<"none" | "pptx" | "md" | "pdf">("none");
     const [filter, setFilter] = useState<"all" | "summary" | "contradiction" | "research_gap">("all");
+    const [expandedInsightId, setExpandedInsightId] = useState<string | null>(null);
 
     // Fetch insights when workspace changes
     useEffect(() => {
@@ -207,6 +209,29 @@ export default function InsightsPanel({ workspaceId }: InsightsPanelProps) {
                                     <div className="text-sm text-white/80 whitespace-pre-wrap leading-relaxed">
                                         {insight.content}
                                     </div>
+
+                                    <div className="mt-3 flex justify-end">
+                                        <button 
+                                            onClick={() => setExpandedInsightId(expandedInsightId === insight.id ? null : insight.id)}
+                                            className="text-xs flex items-center gap-1.5 text-white/40 hover:text-white/80 transition-colors bg-white/5 px-2 py-1 rounded hover:bg-white/10"
+                                        >
+                                            <MessageSquare size={12} />
+                                            {expandedInsightId === insight.id ? "Close Discussion" : "Discuss"}
+                                        </button>
+                                    </div>
+
+                                    <AnimatePresence>
+                                        {expandedInsightId === insight.id && workspaceId && (
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                exit={{ opacity: 0, height: 0 }}
+                                                className="mt-4 h-[300px] overflow-hidden rounded-xl border border-white/10"
+                                            >
+                                                <CommentSection workspaceId={workspaceId} insightId={insight.id} />
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
                                 </motion.div>
                             );
                         })}

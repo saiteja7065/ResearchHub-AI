@@ -14,8 +14,32 @@ router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 async def get_workspaces(user=Depends(get_current_user)):
     """Fetch all workspaces for the authenticated user"""
     try:
-        response = supabase.table('workspaces').select('*').eq('user_id', user.id).execute()
-        return {"data": response.data}
+        # Fetch workspaces the user owns
+        owned_resp = supabase.table('workspaces').select('*').eq('user_id', user.id).execute()
+        owned = owned_resp.data or []
+        
+        # Fetch workspaces the user is a member of (invited to)
+        members_resp = supabase.table('workspace_members').select('workspace_id, role').eq('user_id', user.id).execute()
+        member_ws_ids = [m['workspace_id'] for m in (members_resp.data or [])]
+        
+        shared = []
+        if member_ws_ids:
+            # Fetch the actual workspace details for these IDs
+            shared_resp = supabase.table('workspaces').select('*').in_('id', member_ws_ids).execute()
+            shared = shared_resp.data or []
+            
+            # Append the role to the shared workspaces so the frontend knows their permission level
+            role_map = {m['workspace_id']: m['role'] for m in (members_resp.data or [])}
+            for ws in shared:
+                ws['shared_role'] = role_map.get(ws['id'])
+                
+        # Combine and return
+        all_workspaces = owned + shared
+        
+        # Sort by updated_at or created_at
+        all_workspaces.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+        
+        return {"data": all_workspaces}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -23,8 +47,20 @@ async def get_workspaces(user=Depends(get_current_user)):
 async def get_dashboard_stats(user=Depends(get_current_user)):
     """Return dashboard stats: workspace count, papers imported, recent activity"""
     try:
-        ws_resp = supabase.table('workspaces').select('id, name, created_at').eq('user_id', user.id).execute()
-        workspaces = ws_resp.data or []
+        # Fetch workspaces the user owns
+        owned_resp = supabase.table('workspaces').select('id, name, created_at').eq('user_id', user.id).execute()
+        owned = owned_resp.data or []
+        
+        # Fetch shared workspaces
+        members_resp = supabase.table('workspace_members').select('workspace_id').eq('user_id', user.id).execute()
+        member_ws_ids = [m['workspace_id'] for m in (members_resp.data or [])]
+        shared = []
+        if member_ws_ids:
+            shared_resp = supabase.table('workspaces').select('id, name, created_at').in_('id', member_ws_ids).execute()
+            shared = shared_resp.data or []
+            
+        workspaces = owned + shared
+        workspaces.sort(key=lambda x: x.get('created_at', ''), reverse=True)
 
         papers_resp = supabase.table('papers').select('id', count='exact').eq('user_id', user.id).execute()
         papers_count = papers_resp.count or 0
@@ -55,10 +91,14 @@ async def create_workspace(name: str = Form(...), description: str = Form(""), u
 async def get_workspace_papers(workspace_id: str, user=Depends(get_current_user)):
     """Fetch all papers (uploaded or imported) for a specific workspace"""
     try:
-        # Verify workspace belongs to user
+        # Verify workspace belongs to user OR user is a member
         ws = supabase.table("workspaces").select("id").eq("id", workspace_id).eq("user_id", user.id).execute()
-        if not ws.data:
-            raise HTTPException(status_code=404, detail="Workspace not found")
+        is_owner = len(ws.data) > 0
+        
+        if not is_owner:
+            member = supabase.table("workspace_members").select("role").eq("workspace_id", workspace_id).eq("user_id", user.id).execute()
+            if not member.data:
+                raise HTTPException(status_code=403, detail="Workspace not found or access denied")
 
         papers = supabase.table("papers").select(
             "id, title, original_filename, metadata, created_at"
