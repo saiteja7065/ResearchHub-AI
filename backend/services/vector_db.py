@@ -70,4 +70,33 @@ class VectorDBService:
         
         return len(points)
 
+    def search(self, workspace_id: str, query: str, limit: int = 5, paper_ids: List[str] = None) -> List[Dict[str, Any]]:
+        collection_name = f"workspace_{workspace_id.replace('-', '_')}"
+        try:
+            query_vector = self.model.encode(query).tolist()
+            
+            from qdrant_client.http.models import Filter, FieldCondition, MatchAny
+            
+            query_filter = None
+            if paper_ids:
+                query_filter = Filter(
+                    must=[
+                        FieldCondition(
+                            key="paper_id",
+                            match=MatchAny(any=paper_ids)
+                        )
+                    ]
+                )
+                
+            search_result = self.qdrant.search(
+                collection_name=collection_name,
+                query_vector=query_vector,
+                query_filter=query_filter,
+                limit=limit
+            )
+            return [hit.payload for hit in search_result]
+        except Exception as e:
+            print(f"Qdrant search failed: {e}")
+            return []
+
 vector_db = VectorDBService()

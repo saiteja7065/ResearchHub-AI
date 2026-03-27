@@ -325,6 +325,16 @@ class AIToolsRequest(BaseModel):
     paper_ids: list
     workspace_id: str
 
+class CitationRequest(BaseModel):
+    paper_ids: list
+    workspace_id: str
+    format: str = "APA"
+
+class FactCheckRequest(BaseModel):
+    paper_ids: list
+    workspace_id: str
+    claim: str
+
 
 def _call_groq(system_prompt: str, user_prompt: str) -> str:
     groq = get_groq()
@@ -428,6 +438,68 @@ Papers:
         error_trace = traceback.format_exc()
         print("AI TOOLS ERROR:\n", error_trace)
         raise HTTPException(status_code=500, detail=f"AI Literature Review Error: {str(e)}\n\nTraceback:\n{error_trace}")
+
+
+@router.post("/ai-tools/citations")
+async def generate_citations(req: CitationRequest, user=Depends(get_current_user)):
+    """Generate perfectly formatted academic citations for selected papers."""
+    try:
+        papers = _fetch_papers_context(req.paper_ids, user.id)
+        if not papers:
+            raise HTTPException(status_code=404, detail="No papers found.")
+            
+        context = "\n\n".join([
+            f"**{p['title']}**\nAuthors: {', '.join(p['authors']) if p.get('authors') else 'Unknown'}\nAbstract: {p['abstract'][:200]}"
+            for p in papers
+        ])
+        
+        result = _call_groq(
+            system_prompt=f"You are an expert academic librarian. Your job is to format research papers into perfect {req.format} citations. DO NOT wrap the output in markdown code blocks. DO NOT add conversational padding. ONLY output the formatted citations.",
+            user_prompt=f"Generate {req.format} citations for the following papers. Output ONLY the citations, separated by two newlines.\n\n{context}"
+        )
+        return {"result": result, "papers": [p["title"] for p in papers]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Citation Generation Error: {str(e)}")
+
+@router.post("/ai-tools/fact-check")
+async def fact_check(req: FactCheckRequest, user=Depends(get_current_user)):
+    """Fact check a claim using RAG against workspace documents."""
+    try:
+        # 1. Search Qdrant for relevant chunks
+        from services.vector_db import vector_db
+        chunks = vector_db.search(req.workspace_id, req.claim, limit=5, paper_ids=req.paper_ids)
+        
+        if not chunks:
+            return {
+                "result": "**Verdict:** Unverified\n\n**Justification:** No relevant text found in the selected documents to evaluate this claim.",
+                "papers": []
+            }
+            
+        # 2. Format context blocks
+        context_blocks = []
+        for c in chunks:
+            context_blocks.append(f"Excerpt from document {c.get('paper_id')}:\n\"{c.get('text')}\"")
+        context_str = "\n\n".join(context_blocks)
+            
+        # 3. Ask LLM to evaluate the claim
+        system_prompt = """You are a rigorous academic fact-checker. 
+Given the provided excerpts from research papers, evaluate the user's claim.
+Use the following format explicitly (including bolding):
+
+**Verdict:** [Supported / Refuted / Not Enough Info]
+
+**Justification:** 
+[Your detailed reasoning citing the excerpts and document UUIDs]"""
+
+        user_prompt = f"Claim: {req.claim}\n\nExcerpts:\n{context_str}"
+        
+        result = _call_groq(system_prompt=system_prompt, user_prompt=user_prompt)
+        
+        return {"result": result, "papers": list(set([c.get('paper_id') for c in chunks]))}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Fact Check Error: {str(e)}")
 
 
 @router.delete("/{paper_id}")

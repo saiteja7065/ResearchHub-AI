@@ -1,8 +1,11 @@
 import os
 from supabase import create_client, Client
 
-url = "https://ionrokdbxtnettdndyqt.supabase.co"
-key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvbnJva2RieHRuZXR0ZG5keXF0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MjI4MDQyMCwiZXhwIjoyMDg3ODU2NDIwfQ.zup9STYglnUJlS67B2lGab1nlsvdeby_9mVWboYrDO4")
+from dotenv import load_dotenv
+
+load_dotenv()
+url = os.environ.get("SUPABASE_URL")
+key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(url, key)
 
 with open('migration_1.sql', 'r') as f:

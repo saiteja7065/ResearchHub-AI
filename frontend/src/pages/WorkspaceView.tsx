@@ -8,6 +8,7 @@ import {
 import { submitFormDataApi, fetchApi } from '../lib/api';
 import WorkspaceSettingsModal from '../components/WorkspaceSettingsModal';
 import CommentSection from '../components/CommentSection';
+import AIToolsPanel from '../components/AIToolsPanel';
 
 interface Paper {
     id: string;
@@ -24,6 +25,7 @@ export default function WorkspaceView() {
     const [isUploading, setIsUploading] = useState(false);
     const [uploadStatus, setUploadStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isAIToolsOpen, setIsAIToolsOpen] = useState(false);
 
     // Papers list state
     const [papers, setPapers] = useState<Paper[]>([]);
@@ -113,13 +115,21 @@ export default function WorkspaceView() {
                         Upload literature into this workspace to begin analysis.
                     </p>
                 </div>
-                <button 
-                    onClick={() => setIsSettingsOpen(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-secondary/80 hover:bg-secondary text-secondary-foreground rounded-xl text-sm font-medium transition-colors border border-border/80"
-                >
-                    <Settings className="w-4 h-4" />
-                    Settings
-                </button>
+                <div className="flex items-center gap-3">
+                    <button 
+                        onClick={() => setIsAIToolsOpen(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-foreground hover:bg-foreground/90 text-background rounded-xl text-sm font-bold transition-all shadow-md hover:-translate-y-0.5"
+                    >
+                        ✨ AI Tools
+                    </button>
+                    <button 
+                        onClick={() => setIsSettingsOpen(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-secondary/80 hover:bg-secondary text-secondary-foreground rounded-xl text-sm font-medium transition-colors border border-border/80"
+                    >
+                        <Settings className="w-4 h-4" />
+                        Settings
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -362,12 +372,20 @@ export default function WorkspaceView() {
             </div>
 
             {id && (
-                <WorkspaceSettingsModal 
-                    isOpen={isSettingsOpen} 
-                    onClose={() => setIsSettingsOpen(false)} 
-                    workspaceId={id} 
-                    workspaceName="Workspace Configuration" 
-                />
+                <>
+                    <WorkspaceSettingsModal 
+                        isOpen={isSettingsOpen} 
+                        onClose={() => setIsSettingsOpen(false)} 
+                        workspaceId={id} 
+                        workspaceName="Workspace Configuration" 
+                    />
+                    <AIToolsPanel
+                        isOpen={isAIToolsOpen}
+                        onClose={() => setIsAIToolsOpen(false)}
+                        workspaceId={id}
+                        papers={papers}
+                    />
+                </>
             )}
         </div>
     );
