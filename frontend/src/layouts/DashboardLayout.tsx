@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Outlet, Link, useLocation, Navigate } from "react-router-dom";
 import { BookOpen, Search, Settings, PanelLeft, Bot, LogOut, Zap } from "lucide-react";
 import { cn } from "../lib/utils";
@@ -7,6 +8,7 @@ import { supabase } from "../lib/supabase";
 export default function DashboardLayout() {
     const location = useLocation();
     const { user, session, loading } = useAuth();
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     // If auth is still resolving, show a loader
     if (loading) {
@@ -38,7 +40,10 @@ export default function DashboardLayout() {
         <div className="flex h-screen bg-background text-foreground overflow-hidden">
 
             {/* Sidebar */}
-            <aside className="w-64 border-r border-border bg-card flex flex-col hidden md:flex">
+            <aside className={cn(
+                "w-64 border-r border-border bg-card flex flex-col fixed inset-y-0 left-0 z-50 transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0 md:flex shadow-2xl md:shadow-none",
+                isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+            )}>
                 <div className="h-16 flex items-center px-6 border-b border-border">
                     <Link to="/" className="flex items-center gap-2 font-bold text-lg tracking-tight">
                         <Bot className="w-5 h-5 text-primary" />
@@ -53,6 +58,7 @@ export default function DashboardLayout() {
                             <Link
                                 key={item.href}
                                 to={item.href}
+                                onClick={() => setIsMobileMenuOpen(false)}
                                 className={cn(
                                     "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
                                     isActive
@@ -67,10 +73,10 @@ export default function DashboardLayout() {
                     })}
                 </div>
 
-                <div className="p-4 border-t border-border">
+                <div className="p-4 border-t border-border mt-auto">
                     <div className="flex flex-col gap-3">
                         <div className="flex items-center gap-3 p-2 rounded-lg bg-secondary/50">
-                            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold uppercase">
+                            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold uppercase shrink-0">
                                 {user?.email?.charAt(0) || 'U'}
                             </div>
                             <div className="flex-1 overflow-hidden">
@@ -89,10 +95,21 @@ export default function DashboardLayout() {
                 </div>
             </aside>
 
+            {/* Mobile Overlay */}
+            {isMobileMenuOpen && (
+                <div 
+                    className="fixed inset-0 bg-black/50 z-40 md:hidden"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                />
+            )}
+
             {/* Main Content Area */}
             <main className="flex-1 flex flex-col min-w-0">
-                <header className="h-16 border-b border-border bg-card/50 backdrop-blur-sm flex items-center justify-between px-4 sm:px-6 z-10">
-                    <button className="md:hidden p-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-md">
+                <header className="h-16 border-b border-border bg-card/50 backdrop-blur-sm flex items-center justify-between px-4 sm:px-6 z-10 shrink-0">
+                    <button 
+                        className="md:hidden p-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-md"
+                        onClick={() => setIsMobileMenuOpen(true)}
+                    >
                         <PanelLeft className="w-5 h-5" />
                     </button>
 

@@ -202,6 +202,7 @@ export default function AIToolsPanel({ isOpen, onClose, workspaceId, papers }: A
                                         <option value="MLA">MLA 9th Edition</option>
                                         <option value="Chicago">Chicago Manual of Style</option>
                                         <option value="Harvard">Harvard Format</option>
+                                        <option value="BibTeX">BibTeX (Zotero/Mendeley)</option>
                                     </select>
                                 </div>
                             )}
@@ -248,16 +249,38 @@ export default function AIToolsPanel({ isOpen, onClose, workspaceId, papers }: A
                                     <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
                                         <CheckCircle2 className="w-4 h-4 text-green-500" /> Output Generated
                                     </h4>
-                                    <button 
-                                        onClick={handleCopy}
-                                        className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground bg-background px-2 py-1 rounded-md border border-border shadow-sm transition-colors"
-                                    >
-                                        {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-                                        {copied ? 'Copied!' : 'Copy'}
-                                    </button>
+                                    <div className="flex gap-2">
+                                        {activeTab === 'citation' && citationFormat === 'BibTeX' && (
+                                            <button 
+                                                onClick={() => {
+                                                    const blob = new Blob([result], { type: 'text/plain' });
+                                                    const url = URL.createObjectURL(blob);
+                                                    const a = document.createElement('a');
+                                                    a.href = url;
+                                                    a.download = 'citations.bib';
+                                                    a.click();
+                                                    URL.revokeObjectURL(url);
+                                                }}
+                                                className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary/80 bg-primary/10 px-2 py-1 rounded-md border border-primary/20 shadow-sm transition-colors"
+                                            >
+                                                Download .bib
+                                            </button>
+                                        )}
+                                        <button 
+                                            onClick={handleCopy}
+                                            className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground bg-background px-2 py-1 rounded-md border border-border shadow-sm transition-colors"
+                                        >
+                                            {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                                            {copied ? 'Copied!' : 'Copy'}
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="p-5 overflow-x-auto text-sm prose prose-sm dark:prose-invert max-w-none text-foreground leading-relaxed custom-scrollbar">
-                                    <ReactMarkdown>{result}</ReactMarkdown>
+                                <div className="p-5 overflow-x-auto text-sm prose prose-sm dark:prose-invert max-w-none text-foreground leading-relaxed custom-scrollbar whitespace-pre-wrap">
+                                    {activeTab === 'citation' && citationFormat === 'BibTeX' ? (
+                                        <code className="text-xs">{result}</code>
+                                    ) : (
+                                        <ReactMarkdown>{result}</ReactMarkdown>
+                                    )}
                                 </div>
                             </motion.div>
                         )}

@@ -224,6 +224,20 @@ async def import_paper(paper: dict, user=Depends(get_current_user)):
     if not ws.data:
         raise HTTPException(status_code=404, detail="Workspace not found")
 
+    # ── Freemium Tier Limit Check ─────────────────────────────
+    profile_resp = supabase.table("profiles").select("subscription_tier").eq("id", user.id).execute()
+    tier = profile_resp.data[0].get("subscription_tier", "freemium") if profile_resp.data else "freemium"
+
+    if tier == "freemium":
+        count_resp = supabase.table("papers").select("id", count="exact").eq("user_id", user.id).execute()
+        current_count = count_resp.count or 0
+        if current_count >= 5:
+            raise HTTPException(
+                status_code=403, 
+                detail="Free tier limit reached. Please upgrade to Pro to import more papers."
+            )
+    # ─────────────────────────────────────────────────────────
+
     # Check if already imported
     existing = supabase.table("papers").select("id").eq("workspace_id", workspace_id).eq("original_filename", paper.get("external_id", "")).execute()
     if existing.data:

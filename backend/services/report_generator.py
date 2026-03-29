@@ -113,4 +113,40 @@ class ReportGenerator:
         pdf_stream.seek(0)
         return pdf_stream
 
+    def generate_latex(self, workspace_name: str, insights: list) -> str:
+        safe_name = workspace_name.replace('&', '\\&').replace('%', '\\%').replace('$', '\\$').replace('#', '\\#').replace('_', '\\_')
+        
+        latex = [
+            "\\documentclass{article}",
+            "\\usepackage[utf8]{inputenc}",
+            "\\usepackage{geometry}",
+            "\\geometry{a4paper, margin=1in}",
+            "\\usepackage{hyperref}",
+            "\\title{Literature Review Report: " + safe_name + "}",
+            "\\author{Generated Autonomously by ResearchHub AI}",
+            "\\begin{document}",
+            "\\maketitle",
+        ]
+        
+        for insight in insights:
+            insight_type = str(insight.get('type', 'Insight')).replace('_', ' ').title()
+            date = insight.get('created_at', '').split('T')[0]
+            content = insight.get('content', '')
+            
+            safe_type = insight_type.replace('&', '\\&').replace('%', '\\%').replace('$', '\\$').replace('#', '\\#').replace('_', '\\_')
+            latex.append(f"\\section*{{{safe_type} ({date})}}")
+            
+            p_content = content.replace('\\', '\\\\')
+            p_content = p_content.replace('%', '\\%').replace('$', '\\$').replace('&', '\\&').replace('#', '\\#').replace('_', '\\_')
+            
+            # Naive Markdown to LaTeX bold/italic
+            p_content = re.sub(r'\*\*(.+?)\*\*', r'\\textbf{\1}', p_content)
+            p_content = re.sub(r'\*(.+?)\*', r'\\textit{\1}', p_content)
+            
+            latex.append(p_content)
+            latex.append("") # paragraph break
+            
+        latex.append("\\end{document}")
+        return "\n".join(latex)
+
 report_generator = ReportGenerator()

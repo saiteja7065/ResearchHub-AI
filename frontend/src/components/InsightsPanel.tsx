@@ -4,6 +4,7 @@ import { fetchApi, API_BASE_URL } from "../lib/api";
 import { supabase } from "../lib/supabase";
 import { FileText, AlertTriangle, Target, Loader2, Clock, FileDown, File, MessageSquare } from "lucide-react";
 import CommentSection from "./CommentSection";
+import UpgradeModal from "./UpgradeModal";
 
 interface Insight {
     id: string;
@@ -19,9 +20,12 @@ interface InsightsPanelProps {
 export default function InsightsPanel({ workspaceId }: InsightsPanelProps) {
     const [insights, setInsights] = useState<Insight[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [isExporting, setIsExporting] = useState<"none" | "pptx" | "md" | "pdf">("none");
+    const [isExporting, setIsExporting] = useState<"none" | "pptx" | "md" | "pdf" | "tex">("none");
     const [filter, setFilter] = useState<"all" | "summary" | "contradiction" | "research_gap">("all");
     const [expandedInsightId, setExpandedInsightId] = useState<string | null>(null);
+
+    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+    const [upgradeMessage, setUpgradeMessage] = useState("");
 
     // Fetch insights when workspace changes
     useEffect(() => {
@@ -50,14 +54,14 @@ export default function InsightsPanel({ workspaceId }: InsightsPanelProps) {
 
     }, [workspaceId]);
 
-    const handleExport = async (type: "pptx" | "md" | "pdf") => {
+    const handleExport = async (type: "pptx" | "md" | "pdf" | "tex") => {
         if (!workspaceId) return;
         setIsExporting(type);
         try {
             const { data: { session } } = await supabase.auth.getSession();
             const token = session?.access_token;
 
-            let endpoint = `${API_BASE_URL}/workspaces/${workspaceId}/export/${type === "md" ? "markdown" : type}`;
+            let endpoint = `${API_BASE_URL}/workspaces/${workspaceId}/export/${type === "md" ? "markdown" : type === "tex" ? "latex" : type}`;
 
             const response = await fetch(endpoint, {
                 method: "GET",
@@ -66,7 +70,12 @@ export default function InsightsPanel({ workspaceId }: InsightsPanelProps) {
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({ detail: "Export failed" }));
-                throw new Error(errorData.detail || "Export failed. You may need to install wkhtmltopdf for PDF export.");
+                if (errorData.detail?.includes("Pro") || errorData.detail?.includes("freemium") || errorData.detail?.includes("Advanced export")) {
+                    setUpgradeMessage(errorData.detail);
+                    setShowUpgradeModal(true);
+                    return; // exit quietly
+                }
+                throw new Error(errorData.detail || "Export failed.");
             }
 
             const blob = await response.blob();
@@ -150,6 +159,14 @@ export default function InsightsPanel({ workspaceId }: InsightsPanelProps) {
                             >
                                 {isExporting === "pptx" ? <Loader2 size={12} className="animate-spin" /> : <File size={12} />}
                                 PPTX
+                            </button>
+                            <button
+                                onClick={() => handleExport("tex")}
+                                disabled={isExporting !== "none"}
+                                className={`flex-1 flex flex-shrink-0 items-center justify-center gap-1.5 px-2 py-1.5 disabled:opacity-50 text-white rounded-md text-[10px] font-medium transition-colors border-l border-white/5 ${isExporting === "tex" ? "bg-violet-600" : "hover:bg-white/10"}`}
+                            >
+                                {isExporting === "tex" ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />}
+                                LaTeX
                             </button>
                         </div>
                     )}
@@ -238,6 +255,12 @@ export default function InsightsPanel({ workspaceId }: InsightsPanelProps) {
                     </AnimatePresence>
                 )}
             </div>
+
+            <UpgradeModal 
+                isOpen={showUpgradeModal} 
+                onClose={() => setShowUpgradeModal(false)} 
+                message={upgradeMessage} 
+            />
         </div>
     );
 }

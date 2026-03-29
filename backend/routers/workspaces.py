@@ -122,6 +122,20 @@ async def upload_document(
     2. Parses it using Unstructured.io
     3. Saves the metadata into the Supabase 'papers' table
     """
+    # ── Freemium Tier Limit Check ─────────────────────────────
+    profile_resp = supabase.table("profiles").select("subscription_tier").eq("id", user.id).execute()
+    tier = profile_resp.data[0].get("subscription_tier", "freemium") if profile_resp.data else "freemium"
+
+    if tier == "freemium":
+        count_resp = supabase.table("papers").select("id", count="exact").eq("user_id", user.id).execute()
+        current_count = count_resp.count or 0
+        if current_count >= 5:
+            raise HTTPException(
+                status_code=403, 
+                detail="Free tier limit reached. Please upgrade to Pro to upload more documents."
+            )
+    # ─────────────────────────────────────────────────────────
+
     # 1. Parse the document using Unstructured
     parsed_elements = await document_parser.process_upload(file)
     
@@ -162,6 +176,17 @@ async def export_workspace_pptx(workspace_id: str, user=Depends(get_current_user
     Generate a PowerPoint presentation from the autonomous insights in this workspace.
     """
     try:
+        # ── Freemium Tier Export Check ─────────────────────────────
+        profile_resp = supabase.table("profiles").select("subscription_tier").eq("id", user.id).execute()
+        tier = profile_resp.data[0].get("subscription_tier", "freemium") if profile_resp.data else "freemium"
+
+        if tier == "freemium":
+            raise HTTPException(
+                status_code=403, 
+                detail="Advanced export (PPTX) is only available on the Pro plan."
+            )
+        # ─────────────────────────────────────────────────────────
+
         # 1. Get workspace name
         ws_response = supabase.table('workspaces').select('name').eq('id', workspace_id).eq('user_id', user.id).execute()
         if not ws_response.data:
@@ -241,3 +266,36 @@ async def export_workspace_pdf(workspace_id: str, user=Depends(get_current_user)
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF Export failed: {str(e)}")
+
+@router.get("/{workspace_id}/export/latex")
+async def export_workspace_latex(workspace_id: str, user=Depends(get_current_user)):
+    """
+    Generate a LaTeX (.tex) document from the autonomous insights in this workspace.
+    """
+    try:
+        # ── Freemium Tier Export Check ─────────────────────────────
+        profile_resp = supabase.table("profiles").select("subscription_tier").eq("id", user.id).execute()
+        tier = profile_resp.data[0].get("subscription_tier", "freemium") if profile_resp.data else "freemium"
+
+        if tier == "freemium":
+            raise HTTPException(
+                status_code=403, 
+                detail="Advanced export (LaTeX) is only available on the Pro plan."
+            )
+        # ─────────────────────────────────────────────────────────
+
+        ws_response = supabase.table('workspaces').select('name').eq('id', workspace_id).eq('user_id', user.id).execute()
+        if not ws_response.data:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+        workspace_name = ws_response.data[0]['name']
+
+        insights_response = supabase.table('research_insights').select('*').eq('workspace_id', workspace_id).order('created_at', desc=False).execute()
+        insights = insights_response.data
+        if not insights or len(insights) == 0:
+            raise HTTPException(status_code=400, detail="No insights found to export.")
+
+        tex_content = report_generator.generate_latex(workspace_name, insights)
+        headers = {'Content-Disposition': f'attachment; filename="{workspace_name.replace(" ", "_")}_Literature_Review.tex"'}
+        return Response(content=tex_content, media_type="application/x-tex", headers=headers)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"LaTeX Export failed: {str(e)}")

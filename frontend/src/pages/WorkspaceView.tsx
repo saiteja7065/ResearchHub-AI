@@ -9,6 +9,7 @@ import { submitFormDataApi, fetchApi } from '../lib/api';
 import WorkspaceSettingsModal from '../components/WorkspaceSettingsModal';
 import CommentSection from '../components/CommentSection';
 import AIToolsPanel from '../components/AIToolsPanel';
+import UpgradeModal from '../components/UpgradeModal';
 
 interface Paper {
     id: string;
@@ -26,6 +27,9 @@ export default function WorkspaceView() {
     const [uploadStatus, setUploadStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isAIToolsOpen, setIsAIToolsOpen] = useState(false);
+
+    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+    const [upgradeMessage, setUpgradeMessage] = useState("");
 
     // Papers list state
     const [papers, setPapers] = useState<Paper[]>([]);
@@ -73,7 +77,12 @@ export default function WorkspaceView() {
             await fetchPapers();
         } catch (err: unknown) {
             const errorMsg = err instanceof Error ? err.message : 'Failed to upload document.';
-            setUploadStatus({ type: 'error', msg: errorMsg });
+            if (errorMsg.includes('Free tier limit reached') || errorMsg.includes('Pro')) {
+                setUpgradeMessage(errorMsg);
+                setShowUpgradeModal(true);
+            } else {
+                setUploadStatus({ type: 'error', msg: errorMsg });
+            }
         } finally {
             setIsUploading(false);
         }
@@ -104,7 +113,7 @@ export default function WorkspaceView() {
     return (
         <div className="max-w-6xl mx-auto space-y-8 p-6 md:p-8 h-full overflow-y-auto">
 
-            <div className="flex items-start justify-between">
+            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                 <div>
                     <Link to="/dashboard" className="inline-flex items-center text-sm font-medium text-muted-foreground hover:text-foreground mb-4 transition-colors">
                         <ArrowLeft className="w-4 h-4 mr-2" />
@@ -124,7 +133,7 @@ export default function WorkspaceView() {
                     </button>
                     <button 
                         onClick={() => setIsSettingsOpen(true)}
-                        className="flex items-center gap-2 px-4 py-2 bg-secondary/80 hover:bg-secondary text-secondary-foreground rounded-xl text-sm font-medium transition-colors border border-border/80"
+                        className="flex items-center gap-2 px-4 py-2 bg-secondary/80 hover:bg-secondary text-secondary-foreground rounded-xl text-sm font-medium transition-all hover:shadow-sm hover:-translate-y-0.5 border border-border/80"
                     >
                         <Settings className="w-4 h-4" />
                         Settings
@@ -241,7 +250,7 @@ export default function WorkspaceView() {
                                             initial={{ opacity: 0, y: 10 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             transition={{ delay: idx * 0.04 }}
-                                            className="bg-card border border-border/60 rounded-2xl p-5 hover:border-primary/30 transition-all group relative"
+                                            className="bg-card border border-border/60 rounded-2xl p-5 hover:border-primary/40 transition-all duration-200 ease-out hover:scale-[1.01] hover:shadow-lg hover:shadow-primary/5 group relative"
                                         >
                                             <div className="flex items-start justify-between gap-4 pr-12">
                                                 <div className="flex-1 min-w-0">
@@ -384,6 +393,11 @@ export default function WorkspaceView() {
                         onClose={() => setIsAIToolsOpen(false)}
                         workspaceId={id}
                         papers={papers}
+                    />
+                    <UpgradeModal 
+                        isOpen={showUpgradeModal} 
+                        onClose={() => setShowUpgradeModal(false)} 
+                        message={upgradeMessage} 
                     />
                 </>
             )}

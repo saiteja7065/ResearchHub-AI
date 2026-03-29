@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { fetchApi } from "../lib/api";
 import { useWorkspaces } from "../hooks/useWorkspaces";
+import UpgradeModal from "../components/UpgradeModal";
 
 interface Paper {
     source: string;
@@ -24,6 +25,9 @@ export default function SearchPapersView() {
     const [isSearching, setIsSearching] = useState(false);
     const [searched, setSearched] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+    const [upgradeMessage, setUpgradeMessage] = useState("");
 
     // Import state
     const [importingId, setImportingId] = useState<string | null>(null);
@@ -60,7 +64,12 @@ export default function SearchPapersView() {
             setImportedIds(prev => new Set([...prev, paper.external_id]));
             setShowImportMenu(null);
         } catch (err: any) {
-            alert(`Import failed: ${err.message}`);
+            if (err.message?.includes("upgrade") || err.message?.includes("limit") || err.message?.includes("Pro")) {
+                setUpgradeMessage(err.message);
+                setShowUpgradeModal(true);
+            } else {
+                alert(`Import failed: ${err.message}`);
+            }
         } finally {
             setImportingId(null);
         }
@@ -85,7 +94,7 @@ export default function SearchPapersView() {
                 </div>
 
                 {/* Search Bar */}
-                <form onSubmit={handleSearch} className="flex gap-3 flex-col sm:flex-row">
+                <form onSubmit={handleSearch} className="flex gap-3 flex-col xl:flex-row">
                     <div className="relative flex-1">
                         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <input
@@ -117,7 +126,7 @@ export default function SearchPapersView() {
                     <button
                         type="submit"
                         disabled={isSearching || !query.trim()}
-                        className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground font-semibold rounded-xl hover:bg-primary/90 disabled:opacity-50 transition-all text-sm"
+                        className="flex items-center justify-center gap-2 px-6 py-3 bg-primary text-primary-foreground font-semibold rounded-xl hover:bg-primary/90 hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none transition-all text-sm shrink-0"
                     >
                         {isSearching ? (
                             <><Loader2 className="w-4 h-4 animate-spin" /> Searching...</>
@@ -161,7 +170,7 @@ export default function SearchPapersView() {
                                     initial={{ opacity: 0, y: 12 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: idx * 0.04 }}
-                                    className="bg-card border border-border/60 rounded-2xl p-5 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all group"
+                                    className="bg-card border border-border/60 rounded-2xl p-5 hover:border-primary/40 hover:scale-[1.01] hover:shadow-lg hover:shadow-primary/5 transition-all duration-200 ease-out group"
                                 >
                                     {/* Title row */}
                                     <div className="flex items-start justify-between gap-4 mb-2">
@@ -297,6 +306,12 @@ export default function SearchPapersView() {
             {showImportMenu && (
                 <div className="fixed inset-0 z-40" onClick={() => setShowImportMenu(null)} />
             )}
+
+            <UpgradeModal 
+                isOpen={showUpgradeModal} 
+                onClose={() => setShowUpgradeModal(false)} 
+                message={upgradeMessage} 
+            />
         </div>
     );
 }

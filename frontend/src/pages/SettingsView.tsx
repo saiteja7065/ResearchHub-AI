@@ -1,8 +1,9 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { User, Mail, Lock, Camera, Save, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { User, Mail, Lock, Camera, Save, Loader2, CheckCircle, AlertCircle, BookOpen, Search, LogOut } from "lucide-react";
 import { useAuth } from "../store/AuthContext";
 import { supabase } from "../lib/supabase";
+import { fetchApi } from "../lib/api";
 
 export default function SettingsView() {
     const { user } = useAuth();
@@ -22,6 +23,59 @@ export default function SettingsView() {
     // Feedback
     const [profileMsg, setProfileMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
     const [passwordMsg, setPasswordMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+    // Integrations
+    const [scholarId, setScholarId] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [isSearchingScholar, setIsSearchingScholar] = useState(false);
+    const [searchResults, setSearchResults] = useState<any[]>([]);
+
+    useEffect(() => {
+        // Load connected integrations (simulated by checking metadata)
+        if (user?.user_metadata?.scholar_id) {
+            setScholarId(user.user_metadata.scholar_id);
+        }
+    }, [user]);
+
+    const handleSearchScholar = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!searchQuery.trim()) return;
+        setIsSearchingScholar(true);
+        setSearchResults([]);
+        try {
+            const data = await fetchApi(`/integrations/scholar/search?name=${encodeURIComponent(searchQuery)}`);
+            setSearchResults(data || []);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsSearchingScholar(false);
+        }
+    };
+
+    const handleConnectScholar = async (id: string) => {
+        try {
+            const { error } = await supabase.auth.updateUser({
+                data: { scholar_id: id }
+            });
+            if (error) throw error;
+            setScholarId(id);
+            setSearchResults([]);
+        } catch (err) {
+            console.error("Failed to connect scholar", err);
+        }
+    };
+
+    const handleDisconnectScholar = async () => {
+        try {
+            const { error } = await supabase.auth.updateUser({
+                data: { scholar_id: null }
+            });
+            if (error) throw error;
+            setScholarId(null);
+        } catch (err) {
+            console.error("Failed to disconnect scholar", err);
+        }
+    };
 
     const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -253,6 +307,95 @@ export default function SettingsView() {
                                 {passwordMsg.text}
                             </span>
                         )}
+                    </div>
+                </motion.div>
+
+                {/* Integrations Card */}
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="bg-card border border-border rounded-xl p-6 space-y-5"
+                >
+                    <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                        <BookOpen className="w-5 h-5 text-primary" />
+                        Integrations
+                    </h2>
+
+                    <div className="space-y-4">
+                        <div className="p-5 border border-border/80 rounded-xl bg-background/50">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <h3 className="font-medium text-foreground">Google Scholar</h3>
+                                    <p className="text-sm text-muted-foreground mt-1 text-balance">
+                                        Connect your author profile to instantly synchronize your publications across your workspaces.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="mt-5">
+                                {scholarId ? (
+                                    <div className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                                        <div className="flex items-center gap-2">
+                                            <CheckCircle className="w-4 h-4 text-green-500" />
+                                            <span className="text-sm text-green-600 font-medium">Connected (ID: {scholarId})</span>
+                                        </div>
+                                        <button onClick={handleDisconnectScholar} className="text-xs text-red-500 hover:text-red-600 font-semibold p-2">
+                                            Disconnect
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <form onSubmit={handleSearchScholar} className="flex gap-2">
+                                            <div className="relative flex-1">
+                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                                <input
+                                                    value={searchQuery}
+                                                    onChange={e => setSearchQuery(e.target.value)}
+                                                    placeholder="Search author name (e.g. Geoffrey Hinton)"
+                                                    className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                                />
+                                            </div>
+                                            <button
+                                                type="submit"
+                                                disabled={isSearchingScholar || !searchQuery}
+                                                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
+                                            >
+                                                {isSearchingScholar ? <Loader2 className="w-4 h-4 animate-spin" /> : "Search"}
+                                            </button>
+                                        </form>
+
+                                        {searchResults.length > 0 && (
+                                            <div className="border border-border rounded-lg max-h-60 overflow-y-auto bg-card divide-y divide-border">
+                                                {searchResults.map(author => (
+                                                    <div key={author.scholar_id} className="p-3 flex items-center justify-between hover:bg-secondary/50 transition-colors">
+                                                        <div className="flex items-center gap-3">
+                                                            {author.url_picture ? (
+                                                                <img src={author.url_picture} alt="" className="w-10 h-10 rounded-full border border-border object-cover" />
+                                                            ) : (
+                                                                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
+                                                                    {author.name.charAt(0)}
+                                                                </div>
+                                                            )}
+                                                            <div>
+                                                                <p className="text-sm font-bold text-foreground">{author.name}</p>
+                                                                <p className="text-xs text-muted-foreground">{author.affiliation || "Unknown Affiliation"}</p>
+                                                            </div>
+                                                        </div>
+                                                        <button 
+                                                            onClick={() => handleConnectScholar(author.scholar_id)}
+                                                            className="text-xs px-3 py-1.5 bg-primary/10 text-primary font-bold rounded-lg hover:bg-primary hover:text-primary-foreground transition-all"
+                                                        >
+                                                            Connect
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 </motion.div>
             </div>
