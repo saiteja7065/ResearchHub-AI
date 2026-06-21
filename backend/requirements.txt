@@ -17,3 +17,4 @@ reportlab
 pdfplumber
 python-docx
 scholarly
+supabase==2.28.0
