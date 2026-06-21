@@ -11,3 +11,5 @@ coverage/
 .next/
 .expo/
 *.log
+st_cache/
+hf_cache/

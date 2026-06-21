@@ -1,4 +1,8 @@
 import os
+# Force sentence-transformers to use a local cache directory in the project root
+current_dir = os.path.dirname(os.path.abspath(__file__))
+os.environ["SENTENCE_TRANSFORMERS_HOME"] = os.path.abspath(os.path.join(current_dir, "..", "st_cache"))
+
 from typing import List, Dict, Any
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, PointStruct
