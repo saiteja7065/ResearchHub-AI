@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-export const API_BASE_URL = 'http://127.0.0.1:8090';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 
 export async function fetchApi(endpoint: string, options: RequestInit = {}): Promise<any> {
     // Get the latest Supabase session

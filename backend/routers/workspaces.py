@@ -119,32 +119,32 @@ async def upload_document(
 ):
     """
     1. Uploads a document
-    2. Parses it using Unstructured.io
+    2. Parses it using pdfplumber / python-docx / plain text
     3. Saves the metadata into the Supabase 'papers' table
+    4. Embeds and stores in Qdrant for RAG
     """
-    # ── Freemium Tier Limit Check ─────────────────────────────
-    profile_resp = supabase.table("profiles").select("subscription_tier").eq("id", user.id).execute()
-    tier = profile_resp.data[0].get("subscription_tier", "freemium") if profile_resp.data else "freemium"
-
-    if tier == "freemium":
-        count_resp = supabase.table("papers").select("id", count="exact").eq("user_id", user.id).execute()
-        current_count = count_resp.count or 0
-        if current_count >= 5:
-            raise HTTPException(
-                status_code=403, 
-                detail="Free tier limit reached. Please upgrade to Pro to upload more documents."
-            )
-    # ─────────────────────────────────────────────────────────
-
-    # 1. Parse the document using Unstructured
-    parsed_elements = await document_parser.process_upload(file)
-    
-    # 2. Extract basic info
-    title = file.filename or "Untitled Document"
-    
     try:
+        # ── Freemium Tier Limit Check ─────────────────────────────
+        profile_resp = supabase.table("profiles").select("subscription_tier").eq("id", user.id).execute()
+        tier = profile_resp.data[0].get("subscription_tier", "freemium") if profile_resp.data else "freemium"
+
+        if tier == "freemium":
+            count_resp = supabase.table("papers").select("id", count="exact").eq("user_id", user.id).execute()
+            current_count = count_resp.count or 0
+            if current_count >= 5:
+                raise HTTPException(
+                    status_code=403, 
+                    detail="Free tier limit reached. Please upgrade to Pro to upload more documents."
+                )
+        # ─────────────────────────────────────────────────────────
+
+        # 1. Parse the document
+        parsed_elements = await document_parser.process_upload(file)
+        
+        # 2. Extract basic info
+        title = file.filename or "Untitled Document"
+        
         # 3. Save to Supabase Papers table
-        # We store the fully parsed elements in the JSONB metadata column
         response = supabase.table('papers').insert({
             "workspace_id": workspace_id,
             "user_id": user.id,
@@ -167,8 +167,15 @@ async def upload_document(
             "parsed_elements_count": len(parsed_elements),
             "vectors_created": vectors_created
         }
+
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        import traceback
+        print(f"[Upload Error] {type(e).__name__}: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
 
 @router.get("/{workspace_id}/export/pptx")
 async def export_workspace_pptx(workspace_id: str, user=Depends(get_current_user)):

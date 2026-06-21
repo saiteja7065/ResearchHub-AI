@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { fetchApi } from '../lib/api';
 import { supabase } from '../lib/supabase';
-import { Send, User, Loader2 } from 'lucide-react';
+import { Send, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Comment {

@@ -1,13 +1,26 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import workspaces, chat, papers, collaboration, comments, analytics, integrations
 
 app = FastAPI(title="ResearchHub AI Backend")
 
+# Load CORS origins from env, fallback to localhost for development
+origins_env = os.getenv("ALLOWED_ORIGINS")
+if origins_env:
+    origins = [origin.strip() for origin in origins_env.split(",")]
+else:
+    origins = [
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+    ]
+
 # Configure CORS for React frontend communication
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,7 +44,7 @@ async def startup_reindex_qdrant():
     from utils.supabase_client import supabase
     from services.vector_db import vector_db
 
-    print("🔄 [Startup] Re-indexing documents into Qdrant from Supabase...")
+    print("[Startup] Re-indexing documents into Qdrant from Supabase...")
     try:
         response = supabase.table("papers").select("id, workspace_id, title, metadata").execute()
         papers_list = response.data or []
@@ -64,9 +77,9 @@ async def startup_reindex_qdrant():
             )
             total_vectors += vectors_created
 
-        print(f"✅ [Startup] Re-indexed {len(papers_list)} papers → {total_vectors} vectors loaded into Qdrant.")
+        print(f"[Startup] Re-indexed {len(papers_list)} papers -> {total_vectors} vectors loaded into Qdrant.")
     except Exception as e:
-        print(f"⚠️ [Startup] Qdrant re-index failed: {e}")
+        print(f"[Startup] Qdrant re-index failed: {e}")
 
 @app.get("/")
 def read_root():

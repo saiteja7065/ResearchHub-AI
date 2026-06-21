@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { User, Mail, Lock, Camera, Save, Loader2, CheckCircle, AlertCircle, BookOpen, Search, LogOut } from "lucide-react";
+import { User, Mail, Lock, Camera, Save, Loader2, CheckCircle, AlertCircle, BookOpen, Search } from "lucide-react";
 import { useAuth } from "../store/AuthContext";
 import { supabase } from "../lib/supabase";
 import { fetchApi } from "../lib/api";

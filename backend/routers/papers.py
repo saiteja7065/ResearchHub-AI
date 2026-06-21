@@ -285,7 +285,7 @@ async def import_paper(paper: dict, user=Depends(get_current_user)):
                     elements=elements
                 )
         except Exception as idx_err:
-            print(f"⚠️ Qdrant indexing for imported paper failed (non-fatal): {idx_err}")
+            print(f"[Warning] Qdrant indexing for imported paper failed (non-fatal): {idx_err}")
 
         return {"message": "Paper imported successfully", "paper": imported_paper}
     except Exception as e:

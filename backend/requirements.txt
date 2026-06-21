@@ -14,3 +14,6 @@ pydantic-settings==2.0.3
 python-jose[cryptography]==3.3.0
 python-pptx
 reportlab
+pdfplumber
+python-docx
+scholarly

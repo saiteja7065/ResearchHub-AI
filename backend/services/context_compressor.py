@@ -2,7 +2,7 @@ import re
 from typing import List, Dict
 
 class ContextCompressor:
-    def __init__(self, min_similarity_score: float = 0.25, max_jaccard_similarity: float = 0.75, max_total_chars: int = 12000):
+    def __init__(self, min_similarity_score: float = 0.05, max_jaccard_similarity: float = 0.75, max_total_chars: int = 12000):
         self.min_similarity_score = min_similarity_score
         self.max_jaccard_similarity = max_jaccard_similarity
         self.max_total_chars = max_total_chars
@@ -35,10 +35,11 @@ class ContextCompressor:
         for item in retrieved_chunks:
             # 1. Filter out low-relevance chunks
             score = item.get("score", 1.0)
+            text = item.get("text", "").strip()
+            print(f"[Compressor Debug] Raw chunk score: {score:.4f} | Text: {text[:60]}...")
             if score < self.min_similarity_score:
                 continue
                 
-            text = item.get("text", "").strip()
             if not text:
                 continue
 
@@ -72,7 +73,7 @@ class ContextCompressor:
                     final_chunks.append(text[:remaining] + " ...[truncated]")
                 break
 
-        print(f"🗜️ [Context Compressor] Reduced {len(retrieved_chunks)} raw chunks down to {len(final_chunks)} dense chunks. Char count: {current_chars}/{self.max_total_chars}")
+        print(f"[Context Compressor] Reduced {len(retrieved_chunks)} raw chunks down to {len(final_chunks)} dense chunks. Char count: {current_chars}/{self.max_total_chars}")
         return final_chunks
 
 context_compressor = ContextCompressor()

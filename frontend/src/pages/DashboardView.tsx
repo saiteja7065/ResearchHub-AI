@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Folder, Loader2, ArrowRight, FolderOpen, FileText, Search, Zap, Users } from 'lucide-react';
+import { Plus, Folder, Loader2, ArrowRight, Search, Zap, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import { fetchApi } from '../lib/api';
