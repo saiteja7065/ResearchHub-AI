@@ -9,8 +9,8 @@ sentence-transformers==2.2.2
 unstructured[all-docs]==0.11.0
 python-multipart==0.0.6
 httpx==0.28.1
-pydantic==2.4.2
-pydantic-settings==2.0.3
+pydantic>=2.11.7,<3.0.0
+pydantic-settings>=2.0.3,<3.0.0
 python-jose[cryptography]==3.3.0
 python-pptx
 reportlab
