@@ -1,11 +1,55 @@
 import os
-# Force sentence-transformers to use a local cache directory in the project root
-current_dir = os.path.dirname(os.path.abspath(__file__))
-os.environ["SENTENCE_TRANSFORMERS_HOME"] = os.path.abspath(os.path.join(current_dir, "..", "st_cache"))
-
 from typing import List, Dict, Any
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, PointStruct
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+MODEL_DIR = os.path.abspath(os.path.join(current_dir, "..", "model_cache"))
+
+class ONNXEmbeddingModel:
+    def __init__(self, model_dir: str):
+        import onnxruntime as ort
+        from tokenizers import Tokenizer
+        
+        onnx_path = os.path.join(model_dir, "onnx", "model.onnx")
+        tokenizer_path = os.path.join(model_dir, "tokenizer.json")
+        
+        self.tokenizer = Tokenizer.from_file(tokenizer_path)
+        self.tokenizer.enable_padding(pad_id=0, pad_token="[PAD]")
+        self.tokenizer.enable_truncation(max_length=256)
+        
+        self.session = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
+
+    def encode(self, sentences):
+        import numpy as np
+        
+        is_single = isinstance(sentences, str)
+        if is_single:
+            sentences = [sentences]
+            
+        encodings = self.tokenizer.encode_batch(sentences)
+        input_ids = np.array([e.ids for e in encodings], dtype=np.int64)
+        attention_mask = np.array([e.attention_mask for e in encodings], dtype=np.int64)
+        token_type_ids = np.array([e.type_ids for e in encodings], dtype=np.int64)
+        
+        outputs = self.session.run(None, {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "token_type_ids": token_type_ids
+        })
+        last_hidden_state = outputs[0]
+        
+        input_mask_expanded = np.expand_dims(attention_mask, -1).astype(float)
+        sum_embeddings = np.sum(last_hidden_state * input_mask_expanded, axis=1)
+        sum_mask = np.clip(input_mask_expanded.sum(axis=1), a_min=1e-9, a_max=None)
+        pooled = sum_embeddings / sum_mask
+        
+        norms = np.linalg.norm(pooled, axis=1, keepdims=True)
+        embeddings = pooled / norms
+        
+        if is_single:
+            return embeddings[0]
+        return embeddings
 
 class VectorDBService:
     def __init__(self):
@@ -16,14 +60,13 @@ class VectorDBService:
 
     @property
     def model(self):
-        """Lazy-load the SentenceTransformer model only when first accessed.
-        This prevents PyTorch from loading at import time, allowing the
+        """Lazy-load the custom ONNX embedding model only when first accessed.
+        This prevents ONNX Runtime from loading at import time, allowing the
         FastAPI server to bind to the port immediately on startup."""
         if self._model is None:
-            from sentence_transformers import SentenceTransformer
-            print("[VectorDB] Loading SentenceTransformer model (all-MiniLM-L6-v2)...")
-            self._model = SentenceTransformer('all-MiniLM-L6-v2')
-            print("[VectorDB] Model loaded successfully.")
+            print("[VectorDB] Loading custom ONNX Embedding model (all-MiniLM-L6-v2)...")
+            self._model = ONNXEmbeddingModel(MODEL_DIR)
+            print("[VectorDB] ONNX model loaded successfully.")
         return self._model
 
     def create_collection_if_not_exists(self, collection_name: str):

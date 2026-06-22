@@ -1,12 +1,22 @@
 import os
+from huggingface_hub import hf_hub_download
 
-# Force sentence-transformers to download model weights directly into the project folder
-# This MUST be set before importing sentence_transformers
 current_dir = os.path.dirname(os.path.abspath(__file__))
-os.environ["SENTENCE_TRANSFORMERS_HOME"] = os.path.abspath(os.path.join(current_dir, "st_cache"))
+local_dir = os.path.join(current_dir, "model_cache")
 
-from sentence_transformers import SentenceTransformer
-
-print("Downloading and caching sentence-transformers model (all-MiniLM-L6-v2)...")
-SentenceTransformer('all-MiniLM-L6-v2')
-print("Model download and cache completed successfully!")
+print("Downloading and caching ONNX model and tokenizer from Xenova/all-MiniLM-L6-v2...")
+try:
+    hf_hub_download(
+        repo_id="Xenova/all-MiniLM-L6-v2",
+        filename="onnx/model.onnx",
+        local_dir=local_dir
+    )
+    hf_hub_download(
+        repo_id="Xenova/all-MiniLM-L6-v2",
+        filename="tokenizer.json",
+        local_dir=local_dir
+    )
+    print("Model download and cache completed successfully!")
+except Exception as e:
+    print(f"Error downloading model: {e}")
+    exit(1)
