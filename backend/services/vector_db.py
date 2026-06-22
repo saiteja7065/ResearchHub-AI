@@ -6,16 +6,25 @@ os.environ["SENTENCE_TRANSFORMERS_HOME"] = os.path.abspath(os.path.join(current_
 from typing import List, Dict, Any
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, PointStruct
-from sentence_transformers import SentenceTransformer
 
 class VectorDBService:
     def __init__(self):
         # Using memory natively for fast local development to prevent RocksDB file lock deadlocks
         self.qdrant = QdrantClient(":memory:")
-        
-        # Fast, lightweight embedding model perfect for semantic search MVPs
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+        self._model = None
         self.vector_size = 384 # Size for MiniLM-L6-v2
+
+    @property
+    def model(self):
+        """Lazy-load the SentenceTransformer model only when first accessed.
+        This prevents PyTorch from loading at import time, allowing the
+        FastAPI server to bind to the port immediately on startup."""
+        if self._model is None:
+            from sentence_transformers import SentenceTransformer
+            print("[VectorDB] Loading SentenceTransformer model (all-MiniLM-L6-v2)...")
+            self._model = SentenceTransformer('all-MiniLM-L6-v2')
+            print("[VectorDB] Model loaded successfully.")
+        return self._model
 
     def create_collection_if_not_exists(self, collection_name: str):
         collections_response = self.qdrant.get_collections()
