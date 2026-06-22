@@ -1,8 +1,6 @@
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 python-dotenv==1.0.0
-sqlalchemy==2.0.23
-psycopg2-binary==2.9.9
 groq==0.4.1
 qdrant-client==1.7.0
 sentence-transformers>=3.0.1
@@ -10,7 +8,6 @@ python-multipart==0.0.6
 httpx==0.28.1
 pydantic>=2.11.7,<3.0.0
 pydantic-settings>=2.0.3,<3.0.0
-python-jose[cryptography]==3.3.0
 python-pptx
 reportlab
 pdfplumber

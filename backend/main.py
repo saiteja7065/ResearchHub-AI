@@ -1,4 +1,7 @@
 import os
+# Force offline mode for Hugging Face during runtime to prevent checking for updates or making network requests
+os.environ["HF_HUB_OFFLINE"] = "1"
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import workspaces, chat, papers, collaboration, comments, analytics, integrations
@@ -35,16 +38,16 @@ app.include_router(comments.router)
 app.include_router(analytics.router)
 app.include_router(integrations.router)
 
-@app.on_event("startup")
-async def startup_reindex_qdrant():
+async def reindex_qdrant_task():
     """
-    On server start, re-embed all papers from Supabase into the in-memory Qdrant DB.
-    This ensures Qdrant always has document vectors even after a restart.
+    Background task to re-embed all papers from Supabase into the in-memory Qdrant DB.
+    This ensures Qdrant always has document vectors even after a restart, without blocking
+    the FastAPI server from binding to the port and starting up.
     """
     from utils.supabase_client import supabase
     from services.vector_db import vector_db
 
-    print("[Startup] Re-indexing documents into Qdrant from Supabase...")
+    print("[Startup] Starting background re-indexing of documents from Supabase to Qdrant...")
     try:
         response = supabase.table("papers").select("id, workspace_id, title, metadata").execute()
         papers_list = response.data or []
@@ -77,9 +80,15 @@ async def startup_reindex_qdrant():
             )
             total_vectors += vectors_created
 
-        print(f"[Startup] Re-indexed {len(papers_list)} papers -> {total_vectors} vectors loaded into Qdrant.")
+        print(f"[Startup] Background re-indexing completed successfully: {len(papers_list)} papers -> {total_vectors} vectors loaded.")
     except Exception as e:
-        print(f"[Startup] Qdrant re-index failed: {e}")
+        print(f"[Startup] Background Qdrant re-index failed: {e}")
+
+@app.on_event("startup")
+async def startup_event():
+    import asyncio
+    # Launch re-indexing in the background so the server can bind to the port immediately
+    asyncio.create_task(reindex_qdrant_task())
 
 @app.get("/")
 def read_root():
