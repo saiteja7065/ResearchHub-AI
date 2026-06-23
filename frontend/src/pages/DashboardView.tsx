@@ -39,7 +39,7 @@ export default function DashboardView() {
             }
         };
         fetchAnalytics();
-    }, [workspaces]); // re-fetch when workspaces conceptually change
+    }, []); // Run once on mount — analytics don't change with workspace list
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
