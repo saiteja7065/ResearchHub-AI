@@ -310,22 +310,22 @@ export default function AIAgentsView() {
             {/* Left Column: Chat Area */}
             <div className="flex-1 flex flex-col min-w-0">
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
-                    <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center shadow-lg shadow-purple-900/30">
-                            <Sparkles size={16} className="text-white" />
+                <div className="flex items-center justify-between px-3 sm:px-6 py-3 sm:py-4 border-b border-white/5 gap-2">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                        <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center shadow-lg shadow-purple-900/30 shrink-0">
+                            <Sparkles size={15} className="text-white" />
                         </div>
-                        <div>
-                            <h1 className="text-white font-semibold text-sm">AI Research Agent</h1>
-                            <p className="text-white/40 text-xs">Powered by Llama 3 · RAG-enabled</p>
+                        <div className="min-w-0">
+                            <h1 className="text-white font-semibold text-xs sm:text-sm">AI Research Agent</h1>
+                            <p className="text-white/40 text-xs hidden sm:block">Powered by Llama 3 · RAG-enabled</p>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                         {/* Mobile Insights Button */}
                         <button
                             onClick={() => setIsInsightsOpen(true)}
-                            className="lg:hidden flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-md transition-all shrink-0"
+                            className="lg:hidden flex items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-md transition-all"
                         >
                             <span>Insights</span>
                         </button>
@@ -334,11 +334,11 @@ export default function AIAgentsView() {
                         <div className="relative">
                             <button
                                 onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
-                                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-sm text-white/70"
+                                className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-xs sm:text-sm text-white/70 max-w-[120px] sm:max-w-[180px]"
                             >
-                                <BookOpen size={13} className="text-purple-400" />
-                                <span>{selectedWorkspace?.name || "Select Workspace"}</span>
-                                <ChevronDown size={13} className={`transition-transform ${showWorkspaceDropdown ? "rotate-180" : ""}`} />
+                                <BookOpen size={12} className="text-purple-400 shrink-0" />
+                                <span className="truncate">{selectedWorkspace?.name || "Workspace"}</span>
+                                <ChevronDown size={12} className={`transition-transform shrink-0 ${showWorkspaceDropdown ? "rotate-180" : ""}`} />
                             </button>
 
                             <AnimatePresence>
@@ -374,7 +374,7 @@ export default function AIAgentsView() {
                 </div>
 
                 {/* Messages */}
-                <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+                <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
                     {messages.length === 0 && (
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}

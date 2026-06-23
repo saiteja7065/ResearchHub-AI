@@ -60,7 +60,7 @@ export default function DashboardView() {
 
 
     return (
-        <div className="max-w-6xl mx-auto space-y-8 p-6 md:p-8">
+        <div className="max-w-6xl mx-auto space-y-6 p-4 sm:p-6 md:p-8">
 
             {/* Page Title & Quick Links */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">

@@ -21,27 +21,27 @@ export default function LandingPage() {
             <div className="absolute -bottom-8 left-20 w-72 h-72 bg-purple-500/20 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-4000" />
 
             {/* Navigation */}
-            <nav className="relative z-10 flex items-center justify-between px-6 py-6 max-w-7xl mx-auto">
-                <div className="flex items-center gap-2">
-                    <BrainCircuit className="w-8 h-8 text-primary" />
-                    <span className="text-xl font-bold tracking-tight">ResearchHub AI</span>
+            <nav className="relative z-10 flex items-center justify-between px-4 sm:px-6 py-4 max-w-7xl mx-auto">
+                <div className="flex items-center gap-2 shrink-0">
+                    <BrainCircuit className="w-7 h-7 text-primary" />
+                    <span className="text-lg font-bold tracking-tight">ResearchHub AI</span>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 sm:gap-4">
                     {session ? (
                         <Link
                             to="/dashboard"
-                            className="px-4 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-full hover:bg-primary/90 transition-all shadow-lg"
+                            className="px-3 sm:px-4 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-full hover:bg-primary/90 transition-all shadow-lg whitespace-nowrap"
                         >
                             Go to Dashboard
                         </Link>
                     ) : (
                         <>
-                            <Link to="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                            <Link to="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors hidden sm:block">
                                 Sign In
                             </Link>
                             <Link
                                 to="/login"
-                                className="px-4 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-full hover:bg-primary/90 transition-all shadow-lg"
+                                className="px-3 sm:px-4 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-full hover:bg-primary/90 transition-all shadow-lg whitespace-nowrap"
                             >
                                 Get Started
                             </Link>
