@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { BrainCircuit, Mail, Lock, Loader2, ArrowRight } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -11,6 +11,12 @@ export default function AuthPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const navigate = useNavigate();
+
+    useEffect(() => {
+        // Warm up the Render backend in the background so that it is awake by the time the user logs in
+        const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+        fetch(backendUrl).catch(() => {});
+    }, []);
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();

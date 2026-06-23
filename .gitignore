@@ -15,3 +15,13 @@ st_cache/
 hf_cache/
 model_cache/
 scratch_*.py
+
+# Backend Local Files
+backend/.env
+backend/venv/
+backend/st_cache/
+backend/hf_cache/
+backend/model_cache/
+backend/local_qdrant/
+backend/error_ai_tools.log
+

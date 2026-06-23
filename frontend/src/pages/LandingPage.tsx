@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, BrainCircuit, Search, Database, Upload, MessageSquare, FileText, Zap, Shield, BarChart3, Mail, Github, Linkedin, Twitter } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -5,6 +6,12 @@ import { useAuth } from "../store/AuthContext";
 
 export default function LandingPage() {
     const { session } = useAuth();
+
+    useEffect(() => {
+        // Warm up the Render backend in the background so that it is awake by the time the user logs in
+        const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+        fetch(backendUrl).catch(() => {});
+    }, []);
 
     return (
         <div className="relative min-h-screen w-full bg-background overflow-x-hidden selection:bg-primary selection:text-primary-foreground">
@@ -59,7 +66,7 @@ export default function LandingPage() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.1, ease: "easeOut" }}
-                    className="text-5xl md:text-7xl font-extrabold tracking-tight text-foreground mb-6"
+                    className="text-4xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-foreground mb-6"
                 >
                     Don't just read papers.
                     <br />

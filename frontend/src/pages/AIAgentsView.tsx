@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Bot, User, Sparkles, BookOpen, Loader2, ChevronDown, Mic, MicOff, Pin } from "lucide-react";
+import { Send, Bot, User, Sparkles, BookOpen, Loader2, ChevronDown, Mic, MicOff, Pin, X } from "lucide-react";
 import { API_BASE_URL } from "../lib/api";
 import { useAuth } from "../store/AuthContext";
 import { supabase } from "../lib/supabase";
@@ -41,6 +41,7 @@ export default function AIAgentsView() {
     const [showPaperDropdown, setShowPaperDropdown] = useState(false);
     const [isListening, setIsListening] = useState(false);
     const [pinnedMessages, setPinnedMessages] = useState<Set<number>>(new Set());
+    const [isInsightsOpen, setIsInsightsOpen] = useState(false);
     const recognitionRef = useRef<any>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -320,45 +321,55 @@ export default function AIAgentsView() {
                         </div>
                     </div>
 
-                    {/* Workspace Selector */}
-                    <div className="relative">
+                    <div className="flex items-center gap-2">
+                        {/* Mobile Insights Button */}
                         <button
-                            onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
-                            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-sm text-white/70"
+                            onClick={() => setIsInsightsOpen(true)}
+                            className="lg:hidden flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-md transition-all shrink-0"
                         >
-                            <BookOpen size={13} className="text-purple-400" />
-                            <span>{selectedWorkspace?.name || "Select Workspace"}</span>
-                            <ChevronDown size={13} className={`transition-transform ${showWorkspaceDropdown ? "rotate-180" : ""}`} />
+                            <span>Insights</span>
                         </button>
+                        
+                        {/* Workspace Selector */}
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
+                                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-sm text-white/70"
+                            >
+                                <BookOpen size={13} className="text-purple-400" />
+                                <span>{selectedWorkspace?.name || "Select Workspace"}</span>
+                                <ChevronDown size={13} className={`transition-transform ${showWorkspaceDropdown ? "rotate-180" : ""}`} />
+                            </button>
 
-                        <AnimatePresence>
-                            {showWorkspaceDropdown && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: -8 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, y: -8 }}
-                                    className="absolute right-0 top-full mt-2 w-56 bg-[#12121a] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden"
-                                >
-                                    {workspaces.map((ws) => (
-                                        <button
-                                            key={ws.id}
-                                            onClick={() => {
-                                                setSelectedWorkspace(ws);
-                                                setShowWorkspaceDropdown(false);
-                                                setMessages([]);
-                                            }}
-                                            className={`w-full text-left px-4 py-3 text-sm hover:bg-white/5 transition-colors ${selectedWorkspace?.id === ws.id ? "text-purple-400" : "text-white/70"
-                                                }`}
-                                        >
-                                            {ws.name}
-                                        </button>
-                                    ))}
-                                    {workspaces.length === 0 && (
-                                        <p className="px-4 py-3 text-sm text-white/40">No workspaces yet</p>
-                                    )}
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                            <AnimatePresence>
+                                {showWorkspaceDropdown && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -8 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -8 }}
+                                        className="absolute right-0 top-full mt-2 w-56 bg-[#12121a] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden"
+                                    >
+                                        {workspaces.map((ws) => (
+                                            <button
+                                                key={ws.id}
+                                                onClick={() => {
+                                                    setSelectedWorkspace(ws);
+                                                    setShowWorkspaceDropdown(false);
+                                                    setMessages([]);
+                                                }}
+                                                className={`w-full text-left px-4 py-3 text-sm hover:bg-white/5 transition-colors ${selectedWorkspace?.id === ws.id ? "text-purple-400" : "text-white/70"
+                                                    }`}
+                                            >
+                                                {ws.name}
+                                            </button>
+                                        ))}
+                                        {workspaces.length === 0 && (
+                                            <p className="px-4 py-3 text-sm text-white/40">No workspaces yet</p>
+                                        )}
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
                     </div>
                 </div>
 
@@ -588,6 +599,43 @@ export default function AIAgentsView() {
             <div className="w-80 md:w-96 flex-shrink-0 hidden lg:block">
                 <InsightsPanel workspaceId={selectedWorkspace?.id || null} />
             </div>
+
+            {/* Mobile/Tablet Slide-over Insights Drawer */}
+            <AnimatePresence>
+                {isInsightsOpen && (
+                    <>
+                        {/* Backdrop overlay */}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setIsInsightsOpen(false)}
+                            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 lg:hidden"
+                        />
+                        {/* Drawer body */}
+                        <motion.div
+                            initial={{ x: "100%" }}
+                            animate={{ x: 0 }}
+                            exit={{ x: "100%" }}
+                            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="fixed right-0 top-0 bottom-0 w-80 md:w-96 bg-[#0a0a0f] border-l border-white/10 z-50 lg:hidden flex flex-col"
+                        >
+                            <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
+                                <span className="font-semibold text-white text-sm">Insights Panel</span>
+                                <button
+                                    onClick={() => setIsInsightsOpen(false)}
+                                    className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+                                >
+                                    <X size={16} />
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto">
+                                <InsightsPanel workspaceId={selectedWorkspace?.id || null} />
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
