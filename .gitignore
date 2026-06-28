@@ -25,3 +25,8 @@ backend/model_cache/
 backend/local_qdrant/
 backend/error_ai_tools.log
 
+# Planning docs (internal use only)
+Plans/
+
+# Local log files
+errors.txt
