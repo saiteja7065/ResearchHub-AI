@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Bot, User, Sparkles, BookOpen, Loader2, ChevronDown, Mic, MicOff, Pin, X } from "lucide-react";
+import { Send, Bot, User, Sparkles, BookOpen, Loader2, ChevronDown, Mic, MicOff, Pin, X, Route } from "lucide-react";
 import { API_BASE_URL } from "../lib/api";
 import { useAuth } from "../store/AuthContext";
 import { supabase } from "../lib/supabase";
@@ -12,6 +12,7 @@ interface Message {
     role: "user" | "assistant";
     content: string;
     contextUsed?: number;
+    agent?: string;
 }
 
 interface Workspace {
@@ -199,6 +200,7 @@ export default function AIAgentsView() {
             const decoder = new TextDecoder();
             let assistantContent = "";
             let contextUsed = 0;
+            let agent: string | undefined;
 
             const streamingMessages = [...newMessages, { role: "assistant" as const, content: "", contextUsed: 0 }];
             setMessages(streamingMessages);
@@ -212,7 +214,7 @@ export default function AIAgentsView() {
                 frame = 0;
                 setMessages([
                     ...newMessages,
-                    { role: "assistant", content: assistantContent, contextUsed },
+                    { role: "assistant", content: assistantContent, contextUsed, agent },
                 ]);
             };
             const scheduleFlush = () => {
@@ -234,13 +236,19 @@ export default function AIAgentsView() {
                         const data = JSON.parse(line.slice(6));
 
                         if (data.context_used !== undefined) {
+                            // First event: which agent the router picked and how much context it found
                             contextUsed = data.context_used;
+                            agent = data.agent;
+                            scheduleFlush();
                         } else if (data.token) {
                             assistantContent += data.token;
                             scheduleFlush();
                         } else if (data.error) {
                             assistantContent += (assistantContent ? "\n\n" : "") + `⚠️ ${data.error}`;
                             scheduleFlush();
+                        } else if (data.insight_saved) {
+                            // A specialist agent stored its finding; show it in the Insights panel right away
+                            window.dispatchEvent(new Event(INSIGHTS_REFRESH_EVENT));
                         }
                     } catch {
                         // Skip malformed JSON lines
@@ -332,7 +340,7 @@ export default function AIAgentsView() {
                         </div>
                         <div className="min-w-0">
                             <h1 className="text-white font-semibold text-xs sm:text-sm">AI Research Agent</h1>
-                            <p className="text-white/40 text-xs hidden sm:block">Powered by GPT-OSS 120B on Groq · RAG-enabled</p>
+                            <p className="text-white/40 text-xs hidden sm:block">4 specialist agents · RAG · GPT-OSS 120B on Groq</p>
                         </div>
                     </div>
 
@@ -456,12 +464,22 @@ export default function AIAgentsView() {
                                     ) : (
                                         <p className="whitespace-pre-wrap">{msg.content}</p>
                                     )}
-                                    {msg.role === "assistant" && msg.contextUsed !== undefined && msg.contextUsed > 0 && (
-                                        <p className="text-purple-400/60 text-xs mt-2 flex items-center gap-1">
-                                            <BookOpen size={10} />
-                                            Based on {msg.contextUsed} document chunk{msg.contextUsed !== 1 ? "s" : ""}
-                                            {selectedPaper ? ` from "${selectedPaper.title}"` : ""}
-                                        </p>
+                                    {msg.role === "assistant" && (msg.agent || (msg.contextUsed ?? 0) > 0) && (
+                                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                                            {msg.agent && (
+                                                <span className="inline-flex items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 font-medium text-purple-300">
+                                                    <Route size={10} />
+                                                    {msg.agent} agent
+                                                </span>
+                                            )}
+                                            {(msg.contextUsed ?? 0) > 0 && (
+                                                <span className="text-purple-400/60 flex items-center gap-1">
+                                                    <BookOpen size={10} />
+                                                    Based on {msg.contextUsed} document chunk{msg.contextUsed !== 1 ? "s" : ""}
+                                                    {selectedPaper ? ` from "${selectedPaper.title}"` : ""}
+                                                </span>
+                                            )}
+                                        </div>
                                     )}
                                     {msg.role === "assistant" && !isStreaming && (
                                         <div className="mt-3 pt-3 border-t border-white/10 flex justify-end">

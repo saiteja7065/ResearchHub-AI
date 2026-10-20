@@ -3,6 +3,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 from utils.auth import get_current_user
 from utils.supabase_client import supabase
+from utils.access import require_workspace_access
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/members", tags=["collaboration"])
 
@@ -30,7 +31,7 @@ def check_admin(workspace_id: str, user_id: str):
 @router.get("")
 def list_members(workspace_id: str, user=Depends(get_current_user)):
     """List all members of a workspace."""
-    # Note: RLS handles viewing permissions
+    require_workspace_access(workspace_id, user.id)
     
     # 1. Get the workspace owner
     ws = supabase.table("workspaces").select("user_id").eq("id", workspace_id).execute()

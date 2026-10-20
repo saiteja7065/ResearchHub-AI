@@ -98,35 +98,19 @@ Instructions:
             "model": self.model,
         }
 
-    def chat_stream(
-        self,
-        workspace_id: str,
-        user_message: str,
-        chat_history: Optional[List[Dict[str, str]]] = None,
-        paper_id: Optional[str] = None,
-    ) -> Generator[str, None, None]:
+    def stream_tokens(self, messages: List[Dict[str, str]], temperature: float) -> Generator[str, None, str]:
         """
-        Streaming chat method:
-        Yields SSE-formatted events with tokens as they arrive from Groq.
-        Errors are reported as an SSE event instead of silently cutting the stream.
+        Yield SSE token events as they arrive from the LLM; the generator's return value is the full text,
+        so callers using `text = yield from ...` can store the finished answer.
         """
-        try:
-            messages, context_used = self._build_messages(workspace_id, user_message, chat_history, paper_id)
-
-            # Send context_used count as the first event
-            yield f"data: {json.dumps({'context_used': context_used})}\n\n"
-
-            for chunk in llm.stream(messages, temperature=0.7, max_tokens=2048):
-                if not chunk.choices:
-                    continue
-                token = chunk.choices[0].delta.content
-                if token:
-                    yield f"data: {json.dumps({'token': token})}\n\n"
-        except Exception as e:
-            print(f"[ChatStream] Error: {type(e).__name__}: {e}")
-            yield f"data: {json.dumps({'error': 'The AI service is temporarily unavailable. Please try again.'})}\n\n"
-
-        # Final event to signal completion
-        yield f"data: {json.dumps({'done': True})}\n\n"
+        parts = []
+        for chunk in llm.stream(messages, temperature=temperature, max_tokens=2048):
+            if not chunk.choices:
+                continue
+            token = chunk.choices[0].delta.content
+            if token:
+                parts.append(token)
+                yield f"data: {json.dumps({'token': token})}\n\n"
+        return "".join(parts)
 
 chat_agent = ChatAgentService()

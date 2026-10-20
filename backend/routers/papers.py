@@ -4,6 +4,7 @@ import httpx
 import xml.etree.ElementTree as ET
 from utils.auth import get_current_user
 from utils.supabase_client import supabase
+from utils.access import require_workspace_access, accessible_paper_ids, WRITE_ROLES
 
 router = APIRouter(prefix="/papers", tags=["papers"])
 
@@ -219,10 +220,8 @@ def import_paper(paper: dict, user=Depends(get_current_user)):
     if not workspace_id:
         raise HTTPException(status_code=400, detail="workspace_id is required")
 
-    # Verify workspace belongs to user
-    ws = supabase.table("workspaces").select("id").eq("id", workspace_id).eq("user_id", user.id).execute()
-    if not ws.data:
-        raise HTTPException(status_code=404, detail="Workspace not found")
+    # Owner, admins and editors may add papers to a workspace
+    require_workspace_access(workspace_id, user.id, WRITE_ROLES)
 
     # ── Freemium Tier Limit Check ─────────────────────────────
     profile_resp = supabase.table("profiles").select("subscription_tier").eq("id", user.id).execute()
@@ -301,6 +300,8 @@ import traceback
 
 def _fetch_papers_context(paper_ids: list, user_id: str) -> list:
     """Fetch paper title + abstract from Supabase for the given IDs (one query instead of one per paper)."""
+    # Only papers in workspaces this user can access; anything else is silently dropped
+    paper_ids = accessible_paper_ids(paper_ids, user_id)
     if not paper_ids:
         return []
     rows = supabase.table("papers").select("id, title, metadata").in_("id", paper_ids).execute()
@@ -466,6 +467,7 @@ def generate_citations(req: CitationRequest, user=Depends(get_current_user)):
 @router.post("/ai-tools/fact-check")
 def fact_check(req: FactCheckRequest, user=Depends(get_current_user)):
     """Fact check a claim using RAG against workspace documents."""
+    require_workspace_access(req.workspace_id, user.id)
     try:
         # 1. Search Qdrant for relevant chunks
         from services.vector_db import vector_db

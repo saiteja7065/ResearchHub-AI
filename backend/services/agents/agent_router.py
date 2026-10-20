@@ -1,5 +1,6 @@
+import json
 from enum import Enum
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Generator, List, Optional
 from services import llm
 
 class AgentType(str, Enum):
@@ -58,21 +59,57 @@ Output ONLY the exact string from the list above, nothing else."""
         route = self.route_query(user_message, chat_history)
         print(f"AgentRouter selected route: {route.name}")
 
+        agent = self._specialist_for(route)
+        if agent is not None:
+            return agent.run(workspace_id, user_message, chat_history, user_id, paper_id=paper_id)
+
+        # Fallback to standard contextual RAG chat
+        from services.chat_agent import chat_agent
+        result = chat_agent.chat(workspace_id=workspace_id, user_message=user_message, chat_history=chat_history, paper_id=paper_id)
+        result["agent_used"] = "General Chat"
+        return result
+
+    @staticmethod
+    def _specialist_for(route: AgentType):
         from services.agents.summarization_agent import summarization_agent
         from services.agents.contradiction_agent import contradiction_agent
         from services.agents.gap_detection_agent import gap_detection_agent
-        from services.chat_agent import chat_agent
+        return {
+            AgentType.SUMMARIZE: summarization_agent,
+            AgentType.CONTRADICTION: contradiction_agent,
+            AgentType.GAP_DETECTION: gap_detection_agent,
+        }.get(route)
 
-        if route == AgentType.SUMMARIZE:
-            return summarization_agent.run(workspace_id, user_message, chat_history, user_id, paper_id=paper_id)
-        
-        elif route == AgentType.CONTRADICTION:
-            return contradiction_agent.run(workspace_id, user_message, chat_history, user_id, paper_id=paper_id)
-        
-        elif route == AgentType.GAP_DETECTION:
-            return gap_detection_agent.run(workspace_id, user_message, chat_history, user_id, paper_id=paper_id)
-        
-        else: # Fallback to standard contextual RAG chat
-            return chat_agent.chat(workspace_id=workspace_id, user_message=user_message, chat_history=chat_history, paper_id=paper_id)
+    def chat_stream(self, workspace_id: str, user_message: str, chat_history: Optional[List[Dict[str, str]]] = None, user_id: str = None, paper_id: Optional[str] = None) -> Generator[str, None, None]:
+        """
+        Streaming entrypoint (POST /chat/stream): route the question, then stream the chosen agent's answer.
+        SSE events, in order: {agent, context_used} -> {token}... -> {insight_saved}? -> {done}.
+        Errors are sent as an {error} event instead of silently cutting the stream.
+        """
+        from services.chat_agent import chat_agent
+        try:
+            route = self.route_query(user_message, chat_history)
+            agent = self._specialist_for(route)
+            print(f"AgentRouter (stream) selected route: {route.name}")
+
+            if agent is None:
+                messages, context_used = chat_agent._build_messages(workspace_id, user_message, chat_history, paper_id)
+                label, temperature = "General Chat", 0.7
+            else:
+                messages, context_used = agent.build_messages(workspace_id, user_message, chat_history, paper_id)
+                label, temperature = agent.label, agent.temperature
+
+            yield f"data: {json.dumps({'agent': label, 'context_used': context_used})}\n\n"
+
+            full_text = yield from chat_agent.stream_tokens(messages, temperature)
+
+            # Specialist findings land in the Insights panel, same as the non-streaming endpoint
+            if agent is not None and agent.save_insight(workspace_id, user_id, full_text):
+                yield f"data: {json.dumps({'insight_saved': agent.insight_type})}\n\n"
+        except Exception as e:
+            print(f"[ChatStream] Error: {type(e).__name__}: {e}")
+            yield f"data: {json.dumps({'error': 'The AI service is temporarily unavailable. Please try again.'})}\n\n"
+
+        yield f"data: {json.dumps({'done': True})}\n\n"
 
 agent_router = AgentRouter()

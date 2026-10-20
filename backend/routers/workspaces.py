@@ -8,6 +8,7 @@ from services.vector_db import vector_db
 from services.presentation_generator import presentation_generator
 from services.report_generator import report_generator
 from utils.supabase_client import supabase
+from utils.access import require_workspace_access, WRITE_ROLES
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
@@ -93,13 +94,7 @@ def get_workspace_papers(workspace_id: str, user=Depends(get_current_user)):
     """Fetch all papers (uploaded or imported) for a specific workspace"""
     try:
         # Verify workspace belongs to user OR user is a member
-        ws = supabase.table("workspaces").select("id").eq("id", workspace_id).eq("user_id", user.id).execute()
-        is_owner = len(ws.data) > 0
-        
-        if not is_owner:
-            member = supabase.table("workspace_members").select("role").eq("workspace_id", workspace_id).eq("user_id", user.id).execute()
-            if not member.data:
-                raise HTTPException(status_code=403, detail="Workspace not found or access denied")
+        require_workspace_access(workspace_id, user.id)
 
         papers = supabase.table("papers").select(
             "id, title, original_filename, metadata, created_at"
@@ -149,8 +144,10 @@ async def upload_document(
     4. Embeds and stores in Qdrant for RAG
     """
     try:
-        # ── Freemium Tier Limit Check ─────────────────────────────
+        # ── Access + Freemium Tier Limit Check ────────────────────
+        # Only the owner, admins and editors may add papers to a workspace.
         # (Supabase/ONNX calls are blocking, so they run in the threadpool to keep the event loop free)
+        await run_in_threadpool(require_workspace_access, workspace_id, user.id, WRITE_ROLES)
         await run_in_threadpool(_check_upload_limit, user.id)
         # ─────────────────────────────────────────────────────────
 

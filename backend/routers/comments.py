@@ -3,6 +3,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 from utils.auth import get_current_user
 from utils.supabase_client import supabase
+from utils.access import require_workspace_access, ADMIN_ROLES
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/comments", tags=["comments"])
 
@@ -19,7 +20,8 @@ def list_comments(
     user=Depends(get_current_user)
 ):
     """Fetches comments for a specific paper or insight within a workspace."""
-    # RLS ensures user has access to this workspace's comments
+    # The backend uses the service-role key (RLS is bypassed), so check access explicitly
+    require_workspace_access(workspace_id, user.id)
     query = supabase.table("comments").select("*").eq("workspace_id", workspace_id)
     
     if paper_id:
@@ -46,6 +48,7 @@ def create_comment(
         raise HTTPException(status_code=400, detail="Must provide either paper_id or insight_id")
     if comment.paper_id and comment.insight_id:
         raise HTTPException(status_code=400, detail="Cannot provide both paper_id and insight_id")
+    require_workspace_access(workspace_id, user.id)
         
     try:
         data = {
@@ -58,6 +61,8 @@ def create_comment(
         }
         res = supabase.table("comments").insert(data).execute()
         return {"message": "Success", "data": res.data}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -67,17 +72,18 @@ def delete_comment(
     comment_id: str,
     user=Depends(get_current_user)
 ):
-    """Deletes a comment. RLS ensures only the author or an admin can delete."""
+    """Deletes a comment. Only its author or a workspace owner/admin may delete it."""
+    role = require_workspace_access(workspace_id, user.id)
     try:
+        existing = supabase.table("comments").select("user_id").eq("id", comment_id).eq("workspace_id", workspace_id).execute()
+        if not existing.data:
+            raise HTTPException(status_code=404, detail="Comment not found")
+        if existing.data[0]["user_id"] != user.id and role not in ADMIN_ROLES:
+            raise HTTPException(status_code=403, detail="Only the author or an admin can delete this comment")
+
         res = supabase.table("comments").delete().eq("id", comment_id).eq("workspace_id", workspace_id).execute()
-        
-        # If no rows deleted but no error raised, might mean RLS blocked it securely
-        if not res.data:
-            # We don't necessarily throw 403 here because Supabase just returns empty data for RLS failures on delete.
-            # But returning 200 with empty data is standard for PostgREST RLS silent failures, 
-            # though we could do a SELECT first to verify. For now, this is secure.
-            pass
-            
         return {"message": "Success", "data": res.data}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -1,55 +1,17 @@
-import os
-from typing import Dict, Any, List, Optional
-from services import llm
-from utils.supabase_client import supabase
-from services.chat_agent import chat_agent
+from services.agents.base import SpecialistAgent
 
-class ContradictionAgent:
-    def __init__(self):
-        self.model = llm.LLM_MODEL
 
-    def run(self, workspace_id: str, user_message: str, chat_history: Optional[List[Dict[str, str]]] = None, user_id: str = None, paper_id: Optional[str] = None) -> Dict[str, Any]:
-        print(f"Running ContradictionAgent... (paper_id={paper_id})")
-        
-        # 1. Retrieve relevant context (filtered by paper_id if specified)
-        context_chunks = chat_agent._search_context(workspace_id, user_message, top_k=10, paper_id=paper_id)
-        truncated_chunks = [chunk[:1000] + "..." if len(chunk) > 1000 else chunk for chunk in context_chunks]
-        context_text = "\n\n---\n\n".join(truncated_chunks) if truncated_chunks else "No relevant documents found."
-        
-        # 2. Build Contradiction Prompt
-        system_prompt = f"""You are an advanced AI Research Assistant specializing in identifying conflicting claims, disagreements, and contradictions across different research papers.
+class ContradictionAgent(SpecialistAgent):
+    label = "Contradiction Detection"
+    insight_type = "contradiction"
+    # Comparing papers needs evidence from several of them, so retrieve more chunks than plain chat
+    top_k = 10
+    # Strict and careful rather than creative
+    temperature = 0.2
+    nothing_found_phrase = "no clear contradictions"
+    instructions = """You are an advanced AI Research Assistant specializing in identifying conflicting claims, disagreements, and contradictions across different research papers.
 Analyze the provided context and specifically point out where authors disagree, report different results, or propose opposing theories.
-If there are no clear contradictions, state that the literature currently aligns based on the provided text.
+If there are no clear contradictions, say "No clear contradictions" and explain that the literature currently aligns based on the provided text."""
 
-<context>
-{context_text}
-</context>
-"""
-        messages = [{"role": "system", "content": system_prompt}]
-        if chat_history: messages.extend(chat_history[-4:])
-        messages.append({"role": "user", "content": user_message})
-
-        # 3. Call LLM
-        response_text = llm.complete(messages, temperature=0.2, max_tokens=2048)
-
-        # 4. Save to Database
-        if "no clear contradictions" not in response_text.lower():
-            try:
-                supabase.table("research_insights").insert({
-                    "workspace_id": workspace_id,
-                    "user_id": user_id,
-                    "type": "contradiction",
-                    "content": response_text,
-                    "source_papers": []
-                }).execute()
-            except Exception as e:
-                print(f"Failed to save insight to DB: {e}")
-
-        return {
-            "response": response_text,
-            "context_used": len(context_chunks),
-            "model": self.model,
-            "agent_used": "Contradiction Detection"
-        }
 
 contradiction_agent = ContradictionAgent()

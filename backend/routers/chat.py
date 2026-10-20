@@ -4,8 +4,8 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict
 from utils.auth import get_current_user
 from services.agents.agent_router import agent_router
-from services.chat_agent import chat_agent
 from utils.supabase_client import supabase
+from utils.access import require_workspace_access, WRITE_ROLES
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -34,6 +34,7 @@ def chat_with_agent(
     Send a message to the AI Research Agent.
     The agent uses RAG to pull context from the workspace's uploaded documents.
     """
+    require_workspace_access(request.workspace_id, user.id)
     try:
         # Convert to simple dicts for the agent
         history = [{"role": m.role, "content": m.content} for m in request.history] if request.history else []
@@ -60,14 +61,17 @@ def chat_stream_endpoint(
 ):
     """
     Stream AI responses token-by-token using Server-Sent Events (SSE).
+    The agent router first picks the agent (summary, contradiction, gap detection or general chat).
     """
+    require_workspace_access(request.workspace_id, user.id)
     history = [{"role": m.role, "content": m.content} for m in request.history] if request.history else []
 
     return StreamingResponse(
-        chat_agent.chat_stream(
+        agent_router.chat_stream(
             workspace_id=request.workspace_id,
             user_message=request.message,
             chat_history=history,
+            user_id=user.id,
             paper_id=request.paper_id
         ),
         media_type="text/event-stream",
@@ -86,6 +90,7 @@ def get_workspace_insights(
     """
     Fetch all autonomously generated insights (summaries, contradictions, gaps) for a workspace.
     """
+    require_workspace_access(workspace_id, user.id)
     try:
         response = supabase.table("research_insights")\
             .select("*")\
@@ -105,16 +110,15 @@ def pin_chat_message(req: PinMessageRequest, user = Depends(get_current_user)):
     """
     Save a chat message as a 'pinned note' in the Autonomous Insights panel.
     """
-    # 1. Verify user owns the workspace
-    ws = supabase.table("workspaces").select("id").eq("id", req.workspace_id).eq("user_id", user.id).execute()
-    if not ws.data:
-        raise HTTPException(status_code=403, detail="Workspace access denied or not found")
+    # 1. Verify the user can write to the workspace (owner, admin or editor)
+    require_workspace_access(req.workspace_id, user.id, WRITE_ROLES)
 
     # 2. Insert into research_insights as a summary with pinned prefix
     try:
         pinned_content = f"📌 **Pinned Note:**\n\n{req.content}"
         res = supabase.table("research_insights").insert({
             "workspace_id": req.workspace_id,
+            "user_id": user.id,
             "type": "summary",
             "content": pinned_content
         }).execute()
