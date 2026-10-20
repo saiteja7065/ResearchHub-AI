@@ -5,6 +5,7 @@ import { API_BASE_URL } from "../lib/api";
 import { useAuth } from "../store/AuthContext";
 import { supabase } from "../lib/supabase";
 import InsightsPanel from "../components/InsightsPanel";
+import { INSIGHTS_REFRESH_EVENT } from "../lib/events";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 interface Message {
@@ -137,8 +138,9 @@ export default function AIAgentsView() {
     }, [selectedWorkspace]);
 
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
+        // Smooth scrolling restarts its animation on every streamed frame and lags behind; jump instead while streaming
+        messagesEndRef.current?.scrollIntoView({ behavior: isStreaming ? "auto" : "smooth", block: "end" });
+    }, [messages, isStreaming]);
 
     const fetchWorkspaces = async () => {
         const { data } = await supabase.from("workspaces").select("id, name");
@@ -203,6 +205,20 @@ export default function AIAgentsView() {
             setIsLoading(false);
             setIsStreaming(true);
 
+            // Tokens arrive far faster than the screen refreshes; re-rendering the markdown once per
+            // animation frame (instead of once per token) keeps long answers from stuttering.
+            let frame = 0;
+            const flush = () => {
+                frame = 0;
+                setMessages([
+                    ...newMessages,
+                    { role: "assistant", content: assistantContent, contextUsed },
+                ]);
+            };
+            const scheduleFlush = () => {
+                if (!frame) frame = requestAnimationFrame(flush);
+            };
+
             let buffer = "";
             while (true) {
                 const { done, value } = await reader.read();
@@ -221,28 +237,25 @@ export default function AIAgentsView() {
                             contextUsed = data.context_used;
                         } else if (data.token) {
                             assistantContent += data.token;
-                            setMessages([
-                                ...newMessages,
-                                { role: "assistant", content: assistantContent, contextUsed },
-                            ]);
-                        } else if (data.done) {
-                            // Final update with complete content
-                            setMessages([
-                                ...newMessages,
-                                { role: "assistant", content: assistantContent, contextUsed },
-                            ]);
+                            scheduleFlush();
+                        } else if (data.error) {
+                            assistantContent += (assistantContent ? "\n\n" : "") + `⚠️ ${data.error}`;
+                            scheduleFlush();
                         }
                     } catch {
                         // Skip malformed JSON lines
                     }
                 }
             }
+            // Final update with complete content
+            if (frame) cancelAnimationFrame(frame);
+            flush();
         } catch {
             setMessages([
                 ...newMessages,
                 {
                     role: "assistant",
-                    content: "Sorry, I encountered an error. Please check your Groq API key in the backend `.env` file.",
+                    content: "Sorry, I couldn't reach the AI service. The server may be waking up, please try again in a few seconds.",
                 },
             ]);
         } finally {
@@ -273,7 +286,9 @@ export default function AIAgentsView() {
                 }),
             });
 
-            if (!response.ok) {
+            if (response.ok) {
+                window.dispatchEvent(new Event(INSIGHTS_REFRESH_EVENT));
+            } else {
                 console.error("Failed to pin message. Server responded with:", response.status);
                 // Revert UI on failure
                 setPinnedMessages(prev => {
@@ -317,7 +332,7 @@ export default function AIAgentsView() {
                         </div>
                         <div className="min-w-0">
                             <h1 className="text-white font-semibold text-xs sm:text-sm">AI Research Agent</h1>
-                            <p className="text-white/40 text-xs hidden sm:block">Powered by Llama 3 · RAG-enabled</p>
+                            <p className="text-white/40 text-xs hidden sm:block">Powered by GPT-OSS 120B on Groq · RAG-enabled</p>
                         </div>
                     </div>
 

@@ -3,10 +3,15 @@ from typing import List, Optional
 from pydantic import BaseModel
 from utils.auth import get_current_user
 
-try:
-    from scholarly import scholarly
-except ImportError:
-    scholarly = None
+
+def _get_scholarly():
+    # Imported lazily: scholarly is slow to import (~1s) and only used by the Scholar sync feature,
+    # so loading it at startup would only lengthen cold starts.
+    try:
+        from scholarly import scholarly
+        return scholarly
+    except ImportError:
+        return None
 
 router = APIRouter(
     prefix="/integrations",
@@ -33,6 +38,7 @@ def search_google_scholar_profile(name: str, user=Depends(get_current_user)):
     """
     Search Google Scholar for author profiles by name.
     """
+    scholarly = _get_scholarly()
     if not scholarly:
         raise HTTPException(status_code=500, detail="scholarly package not installed")
     
@@ -63,6 +69,7 @@ def sync_scholar_publications(scholar_id: str, limit: int = 10, user=Depends(get
     """
     Fetch the top N publications for a specific Google Scholar author ID.
     """
+    scholarly = _get_scholarly()
     if not scholarly:
         raise HTTPException(status_code=500, detail="scholarly package not installed")
         

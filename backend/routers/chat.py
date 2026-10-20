@@ -26,7 +26,7 @@ class ChatResponse(BaseModel):
     agent_used: Optional[str] = "General Chat"
 
 @router.post("/", response_model=ChatResponse)
-async def chat_with_agent(
+def chat_with_agent(
     request: ChatRequest,
     user=Depends(get_current_user)
 ):
@@ -50,11 +50,11 @@ async def chat_with_agent(
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
-        print("CHAT AGENT ERROR:\\n", error_trace)
-        raise HTTPException(status_code=500, detail=f"Chat agent error: {str(e)}\\n\\nTraceback:\\n{error_trace}")
+        print("CHAT AGENT ERROR:\n", error_trace)
+        raise HTTPException(status_code=500, detail=f"Chat agent error: {str(e)}")
 
 @router.post("/stream")
-async def chat_stream_endpoint(
+def chat_stream_endpoint(
     request: ChatRequest,
     user=Depends(get_current_user)
 ):
@@ -79,7 +79,7 @@ async def chat_stream_endpoint(
     )
 
 @router.get("/insights/{workspace_id}")
-async def get_workspace_insights(
+def get_workspace_insights(
     workspace_id: str,
     user=Depends(get_current_user)
 ):
@@ -101,7 +101,7 @@ class PinMessageRequest(BaseModel):
     content: str
     
 @router.post("/pin")
-async def pin_chat_message(req: PinMessageRequest, user = Depends(get_current_user)):
+def pin_chat_message(req: PinMessageRequest, user = Depends(get_current_user)):
     """
     Save a chat message as a 'pinned note' in the Autonomous Insights panel.
     """

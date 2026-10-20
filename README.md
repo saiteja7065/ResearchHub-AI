@@ -13,7 +13,7 @@
   </a>
   <img src="https://img.shields.io/badge/Frontend-React%2019%20%2B%20Vite-61DAFB?style=for-the-badge&logo=react" alt="React" />
   <img src="https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge&logo=fastapi" alt="FastAPI" />
-  <img src="https://img.shields.io/badge/AI-Groq%20Llama%203.3%2070B-FF6B35?style=for-the-badge" alt="Groq" />
+  <img src="https://img.shields.io/badge/AI-Groq%20GPT--OSS%20120B-FF6B35?style=for-the-badge" alt="Groq" />
   <img src="https://img.shields.io/badge/Database-Supabase-3ECF8E?style=for-the-badge&logo=supabase" alt="Supabase" />
 </p>
 
@@ -98,7 +98,7 @@
 |---|---|---|
 | FastAPI | 0.104 | REST API framework |
 | Python | 3.11+ | Backend language |
-| Groq SDK | 0.12+ | LLM API (Llama 3.3 70B) |
+| Groq SDK | 1.0+ | LLM API (GPT-OSS 120B, configurable) |
 | Qdrant Client | 1.7 | Vector database (in-memory) |
 | ONNX Runtime | 1.19+ | Local embedding model inference |
 | Supabase Python | 2.28 | Database & auth |
@@ -114,7 +114,7 @@
 | **Vercel** | Frontend hosting & CDN |
 | **Render** | Backend API hosting |
 | **Supabase** | PostgreSQL database + authentication |
-| **Groq** | LLM inference (Llama 3.3 70B at 500+ tokens/sec) |
+| **Groq** | LLM inference (GPT-OSS 120B / 20B, ~0.5s time-to-first-token) |
 | **UptimeRobot** | Keep-alive pings to prevent Render cold starts |
 
 ---
@@ -147,7 +147,7 @@
 │                                                              │
 │  Services:                                                   │
 │  ├── vector_db.py    → Qdrant in-memory + ONNX embeddings   │
-│  ├── chat_agent.py   → Groq Llama 3.3 70B RAG pipeline     │
+│  ├── chat_agent.py   → Groq GPT-OSS 120B RAG pipeline      │
 │  ├── document_parser.py → PDF/DOCX/TXT text extraction      │
 │  ├── report_generator.py → PDF/MD literature review         │
 │  └── agents/         → Contradiction, Gap, Summarization    │
@@ -156,7 +156,7 @@
                 ▼                               ▼
 ┌──────────────────────┐          ┌─────────────────────────┐
 │   Supabase           │          │   Groq API              │
-│   ├── PostgreSQL     │          │   Llama 3.3 70B         │
+│   ├── PostgreSQL     │          │   GPT-OSS 120B          │
 │   ├── Auth (JWT)     │          │   500+ tokens/sec       │
 │   └── RLS policies   │          └─────────────────────────┘
 └──────────────────────┘
@@ -172,8 +172,7 @@ ResearchHub-AI/
 │   ├── main.py                    # FastAPI app entry point + startup
 │   ├── requirements.txt           # Python dependencies
 │   ├── download_model.py          # ONNX model download script
-│   ├── migration_combined.sql     # Full database schema
-│   ├── supabase_schema.sql        # Supabase table definitions
+│   ├── supabase_setup.sql         # Complete, idempotent database setup
 │   ├── routers/
 │   │   ├── workspaces.py          # Workspace CRUD endpoints
 │   │   ├── papers.py              # Upload, parse, delete papers
@@ -284,13 +283,17 @@ Create a `.env` file in the `backend/` directory:
 ```env
 # Supabase
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-supabase-service-role-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 
 # Groq LLM
 GROQ_API_KEY=your-groq-api-key
 
 # CORS (comma-separated list of allowed frontend origins)
 ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174
+
+# Optional: override models if Groq retires one
+LLM_MODEL=openai/gpt-oss-120b
+LLM_FAST_MODEL=openai/gpt-oss-20b
 ```
 
 Start the backend server:
@@ -336,14 +339,14 @@ Frontend is now running at: `http://localhost:5173`
 
 ### 4. Database Setup
 
-Run the SQL schema in your Supabase project's SQL Editor:
+Run the setup script in your Supabase project's SQL Editor:
 
 ```bash
 # The file is at:
-backend/migration_combined.sql
+backend/supabase_setup.sql
 ```
 
-Copy the contents and run it in **Supabase → SQL Editor → New Query**.
+Copy the contents and run it in **Supabase → SQL Editor → New Query**. It creates every table, index, RLS policy, the signup trigger that provisions `profiles`, and the `avatars` storage bucket. It is safe to re-run.
 
 ---
 
@@ -351,12 +354,12 @@ Copy the contents and run it in **Supabase → SQL Editor → New Query**.
 
 ```sql
 -- Core tables in Supabase PostgreSQL:
-profiles          -- User profile data
+profiles          -- Email + subscription tier (auto-created on signup)
 workspaces        -- Research workspaces per user
 papers            -- Uploaded/imported papers with metadata
 workspace_members -- Collaboration memberships
-paper_comments    -- Comments on individual papers
-pinned_insights   -- AI responses pinned to Insights Panel
+comments          -- Comments on papers and insights
+research_insights -- Agent findings and pinned chat answers
 ```
 
 All tables use **Row Level Security (RLS)** — users can only access their own data.
@@ -367,7 +370,8 @@ All tables use **Row Level Security (RLS)** — users can only access their own 
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/` | Health check |
+| `GET` | `/health` | Liveness probe (GET/HEAD) |
+| `GET` | `/health/deep` | Readiness probe, also touches the database |
 | `GET` | `/workspaces` | List user's workspaces |
 | `POST` | `/workspaces` | Create new workspace |
 | `GET` | `/workspaces/{id}/papers` | List papers in workspace |
@@ -401,7 +405,7 @@ User Question
    └── Assembles system prompt + retrieved context + question
 
 4. LLM GENERATION
-   └── Groq API → Llama 3.3 70B model
+   └── Groq API → GPT-OSS 120B model
    └── Streams response back to frontend via SSE
 
 5. RESPONSE DELIVERY
@@ -435,16 +439,22 @@ User Question
    ```
 4. Add environment variables in Render dashboard:
    - `SUPABASE_URL`
-   - `SUPABASE_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
    - `GROQ_API_KEY`
    - `ALLOWED_ORIGINS` → your Vercel frontend URL
 
-### Keep-Alive — UptimeRobot
+Or use the included **`render.yaml`** blueprint: Render → New → Blueprint → select this repo.
+
+### Keep-Alive — GitHub Actions + UptimeRobot
+
+`.github/workflows/keep-alive.yml` pings `/health/deep` every 10 minutes, which keeps the Render instance warm **and** keeps the free Supabase project from auto-pausing. Set a repository variable `BACKEND_URL` if your Render URL changes.
+
+Optionally, add UptimeRobot as a second pinger:
 
 To prevent Render free tier cold starts:
 1. Sign up at [uptimerobot.com](https://uptimerobot.com) (free)
 2. Add a new **HTTP(s) Monitor**:
-   - URL: `https://your-render-url.onrender.com/`
+   - URL: `https://your-render-url.onrender.com/health`
    - Interval: **Every 5 minutes**
 3. Save — your backend will never sleep again ✅
 
@@ -479,9 +489,11 @@ Automation with **Playwright** is planned for CI/CD integration.
 | Variable | Description | Required |
 |---|---|---|
 | `SUPABASE_URL` | Your Supabase project URL | ✅ |
-| `SUPABASE_KEY` | Supabase service role key (secret) | ✅ |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (secret) | ✅ |
 | `GROQ_API_KEY` | Groq API key for LLM inference | ✅ |
 | `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins | ✅ |
+| `LLM_MODEL` | Main Groq model (default `openai/gpt-oss-120b`) | ❌ |
+| `LLM_FAST_MODEL` | Routing model (default `openai/gpt-oss-20b`) | ❌ |
 
 ### Frontend (`frontend/.env`)
 | Variable | Description | Required |
@@ -495,8 +507,13 @@ Automation with **Playwright** is planned for CI/CD integration.
 ## ⚡ Performance Optimizations
 
 - **Code Splitting** — Vendor libraries split into separate cached chunks (bundle: 845 kB → 331 kB largest chunk)
-- **Lazy Loading** — React components load on demand per route
-- **Background Indexing** — Qdrant re-indexing runs in background on startup, server binds to port immediately
+- **Lazy Loading** — every route is its own chunk, prefetched when the browser is idle
+- **Non-blocking API** — blocking Supabase/Groq/ONNX work runs in the threadpool, so one slow AI call never stalls other requests
+- **Auth token cache** — validated JWTs are cached for 5 minutes, removing a Supabase round-trip from most requests
+- **Lean payloads** — parsed PDF text is stripped from paper lists; JSON responses are gzip-compressed; CORS preflights cached for 24h
+- **Smooth streaming** — chat tokens are rendered once per animation frame instead of once per token
+- **RAG chunking** — documents are split into ~900-char overlapping chunks so all text fits the embedding model's 256-token window
+- **Background Indexing** — Qdrant re-indexing runs in a background thread on startup, server serves requests immediately
 - **ONNX Model** — Local embedding model instead of external API calls for vector search
 - **UptimeRobot** — Eliminates Render cold start delays at zero cost
 

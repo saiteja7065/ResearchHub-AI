@@ -1,29 +1,21 @@
-import os
 from typing import List, Dict, Any, Optional, Generator
-from dotenv import load_dotenv
-from groq import Groq
+from services import llm
 from services.vector_db import vector_db
 from services.context_compressor import context_compressor
 import json
 
-load_dotenv()
 
 class ChatAgentService:
     def __init__(self):
-        self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        self.model = "llama-3.3-70b-versatile"
+        self.model = llm.LLM_MODEL
 
     def _search_context(self, workspace_id: str, query: str, top_k: int = 5, paper_id: Optional[str] = None) -> List[str]:
         """Search Qdrant for relevant document chunks based on the user's query."""
-        import numpy as np
         from qdrant_client.http import models
-        import numpy as np
-        collection_name = f"workspace_{workspace_id.replace('-', '_')}"
-        
-        # Check if the collection exists
-        collections_response = vector_db.qdrant.get_collections()
-        exists = any(col.name == collection_name for col in collections_response.collections)
-        if not exists:
+        collection_name = vector_db.collection_name(workspace_id)
+
+        # Skip embedding the query entirely when the workspace has nothing indexed
+        if not vector_db.collection_exists(collection_name):
             return []
 
         # Encode the query
@@ -52,7 +44,7 @@ class ChatAgentService:
 
         raw_chunks = [{"text": hit.payload.get("text", ""), "score": hit.score} for hit in results if hit.payload]
         compressed_chunks = context_compressor.compress(raw_chunks)
-        
+
         # Return up to top_k of the highest quality, deduplicated chunks
         return compressed_chunks[:top_k]
 
@@ -60,7 +52,7 @@ class ChatAgentService:
         """Shared helper to build context + messages for both chat() and chat_stream()."""
         context_chunks = self._search_context(workspace_id, user_message, paper_id=paper_id)
         truncated_chunks = [chunk[:1000] + "..." if len(chunk) > 1000 else chunk for chunk in context_chunks]
-        context_text = "\\n\\n---\\n\\n".join(truncated_chunks) if truncated_chunks else "No relevant documents found in this workspace."
+        context_text = "\n\n---\n\n".join(truncated_chunks) if truncated_chunks else "No relevant documents found in this workspace."
 
         system_prompt = f"""You are ResearchHub AI, an expert research assistant. You help users analyze and understand academic papers and research documents that have been uploaded to their workspace.
 
@@ -95,18 +87,10 @@ Instructions:
         Main chat method (non-streaming):
         1. Retrieves relevant context from Qdrant (RAG)
         2. Builds a prompt with the context
-        3. Calls Groq Llama 3 for a response
+        3. Calls the Groq-hosted LLM for a response
         """
         messages, context_used = self._build_messages(workspace_id, user_message, chat_history, paper_id)
-
-        completion = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=0.7,
-            max_tokens=1024,
-        )
-
-        response_text = completion.choices[0].message.content
+        response_text = llm.complete(messages, temperature=0.7, max_tokens=2048)
 
         return {
             "response": response_text,
@@ -124,28 +108,25 @@ Instructions:
         """
         Streaming chat method:
         Yields SSE-formatted events with tokens as they arrive from Groq.
+        Errors are reported as an SSE event instead of silently cutting the stream.
         """
-        messages, context_used = self._build_messages(workspace_id, user_message, chat_history, paper_id)
+        try:
+            messages, context_used = self._build_messages(workspace_id, user_message, chat_history, paper_id)
 
-        # Send context_used count as the first event
-        yield f"data: {json.dumps({'context_used': context_used})}\n\n"
+            # Send context_used count as the first event
+            yield f"data: {json.dumps({'context_used': context_used})}\n\n"
 
-        # Stream tokens from Groq
-        stream = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=0.7,
-            max_tokens=1024,
-            stream=True,
-        )
-
-        for chunk in stream:
-            token = chunk.choices[0].delta.content
-            if token:
-                yield f"data: {json.dumps({'token': token})}\n\n"
+            for chunk in llm.stream(messages, temperature=0.7, max_tokens=2048):
+                if not chunk.choices:
+                    continue
+                token = chunk.choices[0].delta.content
+                if token:
+                    yield f"data: {json.dumps({'token': token})}\n\n"
+        except Exception as e:
+            print(f"[ChatStream] Error: {type(e).__name__}: {e}")
+            yield f"data: {json.dumps({'error': 'The AI service is temporarily unavailable. Please try again.'})}\n\n"
 
         # Final event to signal completion
         yield f"data: {json.dumps({'done': True})}\n\n"
 
 chat_agent = ChatAgentService()
-

@@ -1,4 +1,5 @@
 import os
+import threading
 from typing import List, Dict, Any
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, PointStruct
@@ -20,13 +21,23 @@ class ONNXEmbeddingModel:
         
         self.session = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
 
-    def encode(self, sentences):
+    def encode(self, sentences, batch_size: int = 32):
         import numpy as np
-        
+
         is_single = isinstance(sentences, str)
         if is_single:
             sentences = [sentences]
-            
+
+        # Encode in small batches: one giant padded batch for a long PDF can spike memory past Render's 512MB limit
+        if len(sentences) > batch_size:
+            return np.concatenate([self._encode_batch(sentences[i:i + batch_size]) for i in range(0, len(sentences), batch_size)])
+
+        embeddings = self._encode_batch(sentences)
+        return embeddings[0] if is_single else embeddings
+
+    def _encode_batch(self, sentences):
+        import numpy as np
+
         encodings = self.tokenizer.encode_batch(sentences)
         input_ids = np.array([e.ids for e in encodings], dtype=np.int64)
         attention_mask = np.array([e.attention_mask for e in encodings], dtype=np.int64)
@@ -45,17 +56,16 @@ class ONNXEmbeddingModel:
         pooled = sum_embeddings / sum_mask
         
         norms = np.linalg.norm(pooled, axis=1, keepdims=True)
-        embeddings = pooled / norms
-        
-        if is_single:
-            return embeddings[0]
-        return embeddings
+        return pooled / norms
 
 class VectorDBService:
     def __init__(self):
         # Using memory natively for fast local development to prevent RocksDB file lock deadlocks
         self.qdrant = QdrantClient(":memory:")
         self._model = None
+        self._model_lock = threading.Lock()
+        self._collections_lock = threading.Lock()
+        self._collections = set()
         self.vector_size = 384 # Size for MiniLM-L6-v2
 
     @property
@@ -64,32 +74,65 @@ class VectorDBService:
         This prevents ONNX Runtime from loading at import time, allowing the
         FastAPI server to bind to the port immediately on startup."""
         if self._model is None:
-            print("[VectorDB] Loading custom ONNX Embedding model (all-MiniLM-L6-v2)...")
-            self._model = ONNXEmbeddingModel(MODEL_DIR)
-            print("[VectorDB] ONNX model loaded successfully.")
+            # Lock so the startup warm-up thread and a first request never load the model twice
+            with self._model_lock:
+                if self._model is None:
+                    print("[VectorDB] Loading custom ONNX Embedding model (all-MiniLM-L6-v2)...")
+                    self._model = ONNXEmbeddingModel(MODEL_DIR)
+                    print("[VectorDB] ONNX model loaded successfully.")
         return self._model
 
+    @staticmethod
+    def collection_name(workspace_id: str) -> str:
+        return f"workspace_{workspace_id.replace('-', '_')}"
+
+    def collection_exists(self, collection_name: str) -> bool:
+        # Collections only ever get created through this service, so the in-process set is authoritative
+        return collection_name in self._collections
+
     def create_collection_if_not_exists(self, collection_name: str):
-        collections_response = self.qdrant.get_collections()
-        exists = any(col.name == collection_name for col in collections_response.collections)
-        
-        if not exists:
-            self.qdrant.create_collection(
-                collection_name=collection_name,
-                vectors_config=VectorParams(size=self.vector_size, distance=Distance.COSINE),
-            )
+        if collection_name in self._collections:
+            return
+        with self._collections_lock:
+            existing = {col.name for col in self.qdrant.get_collections().collections}
+            if collection_name not in existing:
+                self.qdrant.create_collection(
+                    collection_name=collection_name,
+                    vectors_config=VectorParams(size=self.vector_size, distance=Distance.COSINE),
+                )
+            self._collections.add(collection_name)
+
+    def delete_paper(self, workspace_id: str, paper_id: str):
+        """Remove a deleted paper's vectors so the chat agent stops citing it."""
+        from qdrant_client.http.models import Filter, FieldCondition, MatchValue, FilterSelector
+        collection_name = self.collection_name(workspace_id)
+        if not self.collection_exists(collection_name):
+            return
+        self.qdrant.delete(
+            collection_name=collection_name,
+            points_selector=FilterSelector(filter=Filter(must=[FieldCondition(key="paper_id", match=MatchValue(value=paper_id))])),
+        )
 
     def embed_and_store(self, workspace_id: str, paper_id: str, elements: List[Dict[str, Any]]):
         """
         Takes parsed text elements, generates embeddings, and saves them to Qdrant.
         The collection name is the workspace_id to isolate data per workspace.
         """
-        collection_name = f"workspace_{workspace_id.replace('-', '_')}"
+        collection_name = self.collection_name(workspace_id)
         self.create_collection_if_not_exists(collection_name)
 
         # We only want to embed narrative text and titles, not empty stuff
         valid_elements = [el for el in elements if el.get("type") in ["NarrativeText", "Title"] and el.get("text")]
-        
+
+        # Papers stored before chunking was added hold whole pages; split them so text beyond the
+        # model's 256-token window is still embedded and searchable.
+        from services.document_parser import chunk_text, CHUNK_CHARS
+        valid_elements = [
+            {**el, "text": chunk} if len(el["text"]) > CHUNK_CHARS else el
+            for el in valid_elements
+            for chunk in (chunk_text(el["text"]) if len(el["text"]) > CHUNK_CHARS else [el["text"]])
+        ]
+
         if not valid_elements:
             return 0
             
@@ -127,7 +170,9 @@ class VectorDBService:
         return len(points)
 
     def search(self, workspace_id: str, query: str, limit: int = 5, paper_ids: List[str] = None) -> List[Dict[str, Any]]:
-        collection_name = f"workspace_{workspace_id.replace('-', '_')}"
+        collection_name = self.collection_name(workspace_id)
+        if not self.collection_exists(collection_name):
+            return []
         try:
             query_vector = self.model.encode(query).tolist()
             

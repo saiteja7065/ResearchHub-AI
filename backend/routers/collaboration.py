@@ -28,7 +28,7 @@ def check_admin(workspace_id: str, user_id: str):
     return False
 
 @router.get("")
-async def list_members(workspace_id: str, user=Depends(get_current_user)):
+def list_members(workspace_id: str, user=Depends(get_current_user)):
     """List all members of a workspace."""
     # Note: RLS handles viewing permissions
     
@@ -76,7 +76,7 @@ async def list_members(workspace_id: str, user=Depends(get_current_user)):
     return {"members": result, "current_user_role": current_user_role}
 
 @router.post("/invite")
-async def invite_member(
+def invite_member(
     workspace_id: str, 
     req: InviteRequest, 
     user=Depends(get_current_user)
@@ -111,7 +111,7 @@ async def invite_member(
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.put("/{member_id}")
-async def update_member_role(
+def update_member_role(
     workspace_id: str, 
     member_id: str,
     req: UpdateRoleRequest,
@@ -128,7 +128,7 @@ async def update_member_role(
     return {"message": "Success", "data": res.data}
 
 @router.delete("/{member_id}")
-async def remove_member(
+def remove_member(
     workspace_id: str, 
     member_id: str,
     user=Depends(get_current_user)

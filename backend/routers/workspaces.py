@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse, Response
+from fastapi.concurrency import run_in_threadpool
 from typing import List
 from utils.auth import get_current_user
 from services.document_parser import document_parser
@@ -11,7 +12,7 @@ from utils.supabase_client import supabase
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
 @router.get("/")
-async def get_workspaces(user=Depends(get_current_user)):
+def get_workspaces(user=Depends(get_current_user)):
     """Fetch all workspaces for the authenticated user"""
     try:
         # Fetch workspaces the user owns
@@ -44,7 +45,7 @@ async def get_workspaces(user=Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/stats")
-async def get_dashboard_stats(user=Depends(get_current_user)):
+def get_dashboard_stats(user=Depends(get_current_user)):
     """Return dashboard stats: workspace count, papers imported, recent activity"""
     try:
         # Fetch workspaces the user owns
@@ -75,7 +76,7 @@ async def get_dashboard_stats(user=Depends(get_current_user)):
 
 
 @router.post("/")
-async def create_workspace(name: str = Form(...), description: str = Form(""), user=Depends(get_current_user)):
+def create_workspace(name: str = Form(...), description: str = Form(""), user=Depends(get_current_user)):
     """Create a new workspace"""
     try:
         response = supabase.table('workspaces').insert({
@@ -88,7 +89,7 @@ async def create_workspace(name: str = Form(...), description: str = Form(""), u
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{workspace_id}/papers")
-async def get_workspace_papers(workspace_id: str, user=Depends(get_current_user)):
+def get_workspace_papers(workspace_id: str, user=Depends(get_current_user)):
     """Fetch all papers (uploaded or imported) for a specific workspace"""
     try:
         # Verify workspace belongs to user OR user is a member
@@ -104,11 +105,35 @@ async def get_workspace_papers(workspace_id: str, user=Depends(get_current_user)
             "id, title, original_filename, metadata, created_at"
         ).eq("workspace_id", workspace_id).order("created_at", desc=True).execute()
 
-        return {"papers": papers.data or []}
+        # Uploaded papers store their full parsed text in metadata.elements; the UI never shows it,
+        # so drop it here instead of shipping megabytes of JSON on every page load.
+        papers_list = papers.data or []
+        for paper in papers_list:
+            meta = paper.get("metadata") or {}
+            if "elements" in meta:
+                meta = {k: v for k, v in meta.items() if k != "elements"}
+                meta["element_count"] = len((paper["metadata"] or {}).get("elements") or [])
+                paper["metadata"] = meta
+
+        return {"papers": papers_list}
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _check_upload_limit(user_id: str):
+    profile_resp = supabase.table("profiles").select("subscription_tier").eq("id", user_id).execute()
+    tier = profile_resp.data[0].get("subscription_tier", "freemium") if profile_resp.data else "freemium"
+
+    if tier == "freemium":
+        count_resp = supabase.table("papers").select("id", count="exact").eq("user_id", user_id).execute()
+        current_count = count_resp.count or 0
+        if current_count >= 5:
+            raise HTTPException(
+                status_code=403, 
+                detail="Free tier limit reached. Please upgrade to Pro to upload more documents."
+            )
 
 
 @router.post("/{workspace_id}/upload")
@@ -125,17 +150,8 @@ async def upload_document(
     """
     try:
         # ── Freemium Tier Limit Check ─────────────────────────────
-        profile_resp = supabase.table("profiles").select("subscription_tier").eq("id", user.id).execute()
-        tier = profile_resp.data[0].get("subscription_tier", "freemium") if profile_resp.data else "freemium"
-
-        if tier == "freemium":
-            count_resp = supabase.table("papers").select("id", count="exact").eq("user_id", user.id).execute()
-            current_count = count_resp.count or 0
-            if current_count >= 5:
-                raise HTTPException(
-                    status_code=403, 
-                    detail="Free tier limit reached. Please upgrade to Pro to upload more documents."
-                )
+        # (Supabase/ONNX calls are blocking, so they run in the threadpool to keep the event loop free)
+        await run_in_threadpool(_check_upload_limit, user.id)
         # ─────────────────────────────────────────────────────────
 
         # 1. Parse the document
@@ -145,17 +161,18 @@ async def upload_document(
         title = file.filename or "Untitled Document"
         
         # 3. Save to Supabase Papers table
-        response = supabase.table('papers').insert({
+        response = await run_in_threadpool(lambda: supabase.table('papers').insert({
             "workspace_id": workspace_id,
             "user_id": user.id,
             "title": title,
             "original_filename": file.filename,
             "metadata": {"elements": parsed_elements}
-        }).execute()
+        }).execute())
         
         # 4. Generate Embeddings & Push to Qdrant Vector DB
         paper_id = response.data[0]['id']
-        vectors_created = vector_db.embed_and_store(
+        vectors_created = await run_in_threadpool(
+            vector_db.embed_and_store,
             workspace_id=workspace_id,
             paper_id=paper_id,
             elements=parsed_elements
@@ -178,7 +195,7 @@ async def upload_document(
 
 
 @router.get("/{workspace_id}/export/pptx")
-async def export_workspace_pptx(workspace_id: str, user=Depends(get_current_user)):
+def export_workspace_pptx(workspace_id: str, user=Depends(get_current_user)):
     """
     Generate a PowerPoint presentation from the autonomous insights in this workspace.
     """
@@ -227,7 +244,7 @@ async def export_workspace_pptx(workspace_id: str, user=Depends(get_current_user
         raise HTTPException(status_code=500, detail=f"Failed to generate presentation: {str(e)}")
 
 @router.get("/{workspace_id}/export/markdown")
-async def export_workspace_markdown(workspace_id: str, user=Depends(get_current_user)):
+def export_workspace_markdown(workspace_id: str, user=Depends(get_current_user)):
     """
     Generate a Markdown document from the autonomous insights in this workspace.
     """
@@ -245,11 +262,13 @@ async def export_workspace_markdown(workspace_id: str, user=Depends(get_current_
         md_content = report_generator.generate_markdown(workspace_name, insights)
         headers = {'Content-Disposition': f'attachment; filename="{workspace_name.replace(" ", "_")}_Literature_Review.md"'}
         return Response(content=md_content, media_type="text/markdown", headers=headers)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
 
 @router.get("/{workspace_id}/export/pdf")
-async def export_workspace_pdf(workspace_id: str, user=Depends(get_current_user)):
+def export_workspace_pdf(workspace_id: str, user=Depends(get_current_user)):
     """
     Generate a PDF document from the autonomous insights in this workspace.
     """
@@ -271,11 +290,13 @@ async def export_workspace_pdf(workspace_id: str, user=Depends(get_current_user)
             media_type="application/pdf", 
             headers=headers
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF Export failed: {str(e)}")
 
 @router.get("/{workspace_id}/export/latex")
-async def export_workspace_latex(workspace_id: str, user=Depends(get_current_user)):
+def export_workspace_latex(workspace_id: str, user=Depends(get_current_user)):
     """
     Generate a LaTeX (.tex) document from the autonomous insights in this workspace.
     """
@@ -304,5 +325,7 @@ async def export_workspace_latex(workspace_id: str, user=Depends(get_current_use
         tex_content = report_generator.generate_latex(workspace_name, insights)
         headers = {'Content-Disposition': f'attachment; filename="{workspace_name.replace(" ", "_")}_Literature_Review.tex"'}
         return Response(content=tex_content, media_type="application/x-tex", headers=headers)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LaTeX Export failed: {str(e)}")

@@ -36,7 +36,6 @@ class ContextCompressor:
             # 1. Filter out low-relevance chunks
             score = item.get("score", 1.0)
             text = item.get("text", "").strip()
-            print(f"[Compressor Debug] Raw chunk score: {score:.4f} | Text: {text[:60]}...")
             if score < self.min_similarity_score:
                 continue
                 

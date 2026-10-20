@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { Outlet, Link, useLocation, Navigate } from "react-router-dom";
 import { BookOpen, Search, Settings, Bot, LogOut, Zap, Menu, X } from "lucide-react";
 import { cn } from "../lib/utils";
@@ -141,7 +141,9 @@ export default function DashboardLayout() {
 
                 {/* Page Content */}
                 <div className="flex-1 overflow-y-auto">
-                    <Outlet />
+                    <Suspense fallback={<div className="flex h-full w-full items-center justify-center"><Bot className="w-8 h-8 text-primary animate-pulse" /></div>}>
+                        <Outlet />
+                    </Suspense>
                 </div>
             </main>
         </div>

@@ -5,7 +5,7 @@ from utils.supabase_client import supabase
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 @router.get("/overview")
-async def get_analytics_overview(user=Depends(get_current_user)):
+def get_analytics_overview(user=Depends(get_current_user)):
     """Fetch high-level aggregate usage metrics for the dashboard."""
     try:
         # 1. Total Workspaces
@@ -44,7 +44,7 @@ async def get_analytics_overview(user=Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/activity")
-async def get_activity_timeline(user=Depends(get_current_user)):
+def get_activity_timeline(user=Depends(get_current_user)):
     """Constructs a chronological timeline by unioning row creations for the user."""
     try:
         activities = []

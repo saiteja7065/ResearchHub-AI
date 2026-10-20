@@ -1,11 +1,6 @@
-import os
-import json
 from enum import Enum
 from typing import Dict, Any, List, Optional
-from groq import Groq
-from dotenv import load_dotenv
-
-load_dotenv()
+from services import llm
 
 class AgentType(str, Enum):
     GENERAL_CHAT = "general_chat"
@@ -19,8 +14,8 @@ class AgentRouter:
     Determines which specialized agent should handle the user's request.
     """
     def __init__(self):
-        self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        self.model = "llama-3.3-70b-versatile"
+        # Intent classification is a tiny task, so it uses the fast model to keep routing latency low
+        self.model = llm.LLM_FAST_MODEL
 
     def route_query(self, user_message: str, chat_history: Optional[List[Dict[str, str]]] = None) -> AgentType:
         """Uses a quick LLM call to classify the intent of the user's query."""
@@ -41,14 +36,8 @@ Output ONLY the exact string from the list above, nothing else."""
         messages.append({"role": "user", "content": user_message})
 
         try:
-            completion = self.client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=messages,
-                temperature=0.0, # Deterministic routing
-                max_tokens=20,
-            )
-            
-            route_str = completion.choices[0].message.content.strip().lower()
+            # Reasoning models spend tokens before answering, so leave headroom beyond the one-word answer
+            route_str = llm.complete(messages, model=self.model, temperature=0.0, max_tokens=256).strip().lower()
             
             # Map loosely returned strings back to Enum
             if "summarize" in route_str: return AgentType.SUMMARIZE

@@ -12,7 +12,7 @@ class CommentCreate(BaseModel):
     insight_id: Optional[str] = None
 
 @router.get("")
-async def list_comments(
+def list_comments(
     workspace_id: str, 
     paper_id: Optional[str] = None,
     insight_id: Optional[str] = None,
@@ -36,7 +36,7 @@ async def list_comments(
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("")
-async def create_comment(
+def create_comment(
     workspace_id: str, 
     comment: CommentCreate,
     user=Depends(get_current_user)
@@ -62,7 +62,7 @@ async def create_comment(
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.delete("/{comment_id}")
-async def delete_comment(
+def delete_comment(
     workspace_id: str, 
     comment_id: str,
     user=Depends(get_current_user)

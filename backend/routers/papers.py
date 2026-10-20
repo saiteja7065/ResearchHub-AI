@@ -209,7 +209,7 @@ async def search_papers(
 
 
 @router.post("/import")
-async def import_paper(paper: dict, user=Depends(get_current_user)):
+def import_paper(paper: dict, user=Depends(get_current_user)):
     """
     Import a paper discovered via search into the user's account.
     Saves metadata to Supabase `papers` table.
@@ -294,44 +294,35 @@ async def import_paper(paper: dict, user=Depends(get_current_user)):
 
 # ── AI Tools Endpoints ───────────────────────────────────────────────────────
 
-from groq import Groq
-import os
+from services import llm
 from pydantic import BaseModel
 import traceback
-from dotenv import load_dotenv
-
-load_dotenv()
-
-_groq_client = None
-
-def get_groq():
-    global _groq_client
-    if _groq_client is None:
-        _groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-    return _groq_client
 
 
 def _fetch_papers_context(paper_ids: list, user_id: str) -> list:
-    """Fetch paper title + abstract from Supabase for the given IDs."""
+    """Fetch paper title + abstract from Supabase for the given IDs (one query instead of one per paper)."""
+    if not paper_ids:
+        return []
+    rows = supabase.table("papers").select("id, title, metadata").in_("id", paper_ids).execute()
+    by_id = {p["id"]: p for p in (rows.data or [])}
+
     papers_data = []
     for pid in paper_ids:
-        row = supabase.table("papers").select(
-            "id, title, metadata"
-        ).eq("id", pid).execute()
-        if row.data:
-            p = row.data[0]
-            meta = p.get("metadata") or {}
-            abstract = meta.get("abstract", "")
-            # fallback: try to get text from uploaded elements
-            if not abstract and "elements" in meta and isinstance(meta["elements"], list):
-                texts = [e.get("text", "") for e in meta["elements"][:20] if isinstance(e, dict) and e.get("text")]
-                abstract = " ".join(texts)[:1000]
-            papers_data.append({
-                "id": p["id"],
-                "title": p["title"],
-                "abstract": abstract[:800],
-                "authors": meta.get("authors", []),
-            })
+        p = by_id.get(pid)
+        if not p:
+            continue
+        meta = p.get("metadata") or {}
+        abstract = meta.get("abstract", "")
+        # fallback: try to get text from uploaded elements
+        if not abstract and "elements" in meta and isinstance(meta["elements"], list):
+            texts = [e.get("text", "") for e in meta["elements"][:20] if isinstance(e, dict) and e.get("text")]
+            abstract = " ".join(texts)[:1000]
+        papers_data.append({
+            "id": p["id"],
+            "title": p["title"],
+            "abstract": abstract[:800],
+            "authors": meta.get("authors", []),
+        })
     return papers_data
 
 
@@ -351,21 +342,18 @@ class FactCheckRequest(BaseModel):
 
 
 def _call_groq(system_prompt: str, user_prompt: str) -> str:
-    groq = get_groq()
-    resp = groq.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
+    return llm.complete(
+        [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
         temperature=0.4,
-        max_tokens=2048,
+        max_tokens=4096,
     )
-    return resp.choices[0].message.content
 
 
 @router.post("/ai-tools/summaries")
-async def generate_summaries(req: AIToolsRequest, user=Depends(get_current_user)):
+def generate_summaries(req: AIToolsRequest, user=Depends(get_current_user)):
     """Generate concise AI summaries for selected papers."""
     try:
         papers = _fetch_papers_context(req.paper_ids, user.id)
@@ -387,14 +375,12 @@ async def generate_summaries(req: AIToolsRequest, user=Depends(get_current_user)
     except Exception as e:
         error_trace = traceback.format_exc()
         print("AI TOOLS ERROR:\n", error_trace)
-        with open("error_ai_tools.log", "w") as f:
-            f.write(error_trace)
-        raise HTTPException(status_code=500, detail=f"AI Summaries Error: {str(e)}\n\nTraceback:\n{error_trace}")
+        raise HTTPException(status_code=500, detail=f"AI Summaries Error: {str(e)}")
 
 
 
 @router.post("/ai-tools/insights")
-async def extract_insights(req: AIToolsRequest, user=Depends(get_current_user)):
+def extract_insights(req: AIToolsRequest, user=Depends(get_current_user)):
     """Extract key insights and trends from selected papers."""
     try:
         papers = _fetch_papers_context(req.paper_ids, user.id)
@@ -416,11 +402,11 @@ async def extract_insights(req: AIToolsRequest, user=Depends(get_current_user)):
     except Exception as e:
         error_trace = traceback.format_exc()
         print("AI TOOLS ERROR:\n", error_trace)
-        raise HTTPException(status_code=500, detail=f"AI Insights Error: {str(e)}\n\nTraceback:\n{error_trace}")
+        raise HTTPException(status_code=500, detail=f"AI Insights Error: {str(e)}")
 
 
 @router.post("/ai-tools/literature-review")
-async def generate_literature_review(req: AIToolsRequest, user=Depends(get_current_user)):
+def generate_literature_review(req: AIToolsRequest, user=Depends(get_current_user)):
     """Generate a comprehensive literature review from selected papers."""
     try:
         papers = _fetch_papers_context(req.paper_ids, user.id)
@@ -451,11 +437,11 @@ Papers:
     except Exception as e:
         error_trace = traceback.format_exc()
         print("AI TOOLS ERROR:\n", error_trace)
-        raise HTTPException(status_code=500, detail=f"AI Literature Review Error: {str(e)}\n\nTraceback:\n{error_trace}")
+        raise HTTPException(status_code=500, detail=f"AI Literature Review Error: {str(e)}")
 
 
 @router.post("/ai-tools/citations")
-async def generate_citations(req: CitationRequest, user=Depends(get_current_user)):
+def generate_citations(req: CitationRequest, user=Depends(get_current_user)):
     """Generate perfectly formatted academic citations for selected papers."""
     try:
         papers = _fetch_papers_context(req.paper_ids, user.id)
@@ -478,7 +464,7 @@ async def generate_citations(req: CitationRequest, user=Depends(get_current_user
         raise HTTPException(status_code=500, detail=f"Citation Generation Error: {str(e)}")
 
 @router.post("/ai-tools/fact-check")
-async def fact_check(req: FactCheckRequest, user=Depends(get_current_user)):
+def fact_check(req: FactCheckRequest, user=Depends(get_current_user)):
     """Fact check a claim using RAG against workspace documents."""
     try:
         # 1. Search Qdrant for relevant chunks
@@ -512,21 +498,30 @@ Use the following format explicitly (including bolding):
         result = _call_groq(system_prompt=system_prompt, user_prompt=user_prompt)
         
         return {"result": result, "papers": list(set([c.get('paper_id') for c in chunks]))}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Fact Check Error: {str(e)}")
 
 
 @router.delete("/{paper_id}")
-async def delete_paper(paper_id: str, user=Depends(get_current_user)):
+def delete_paper(paper_id: str, user=Depends(get_current_user)):
     """Delete a paper from the database for the authenticated user."""
     try:
         # Check if paper belongs to user
-        verify = supabase.table("papers").select("id").eq("id", paper_id).eq("user_id", user.id).execute()
+        verify = supabase.table("papers").select("id, workspace_id").eq("id", paper_id).eq("user_id", user.id).execute()
         if not verify.data:
             raise HTTPException(status_code=404, detail="Paper not found or unauthorized")
 
         # Delete it
         res = supabase.table("papers").delete().eq("id", paper_id).eq("user_id", user.id).execute()
+
+        # Drop its vectors too, otherwise the chat agent keeps citing a deleted paper
+        try:
+            from services.vector_db import vector_db
+            vector_db.delete_paper(verify.data[0]["workspace_id"], paper_id)
+        except Exception as vec_err:
+            print(f"[Warning] Failed to remove vectors for deleted paper {paper_id}: {vec_err}")
         return {"message": "Paper deleted successfully"}
     except HTTPException:
         raise
