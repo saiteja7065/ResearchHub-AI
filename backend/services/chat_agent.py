@@ -14,6 +14,10 @@ class ChatAgentService:
         from qdrant_client.http import models
         collection_name = vector_db.collection_name(workspace_id)
 
+        # After a restart, index this workspace now rather than waiting for the full background rebuild
+        from services.indexer import ensure_workspace_indexed
+        ensure_workspace_indexed(workspace_id)
+
         # Skip embedding the query entirely when the workspace has nothing indexed
         if not vector_db.collection_exists(collection_name):
             return []

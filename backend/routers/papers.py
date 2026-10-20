@@ -471,6 +471,8 @@ def fact_check(req: FactCheckRequest, user=Depends(get_current_user)):
     try:
         # 1. Search Qdrant for relevant chunks
         from services.vector_db import vector_db
+        from services.indexer import ensure_workspace_indexed
+        ensure_workspace_indexed(req.workspace_id)
         chunks = vector_db.search(req.workspace_id, req.claim, limit=5, paper_ids=req.paper_ids)
         
         if not chunks:
