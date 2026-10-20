@@ -6,6 +6,8 @@ import { INSIGHTS_REFRESH_EVENT } from "../lib/events";
 import { FileText, AlertTriangle, Target, Loader2, Clock, FileDown, File, MessageSquare } from "lucide-react";
 import CommentSection from "./CommentSection";
 import UpgradeModal from "./UpgradeModal";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface Insight {
     id: string;
@@ -235,8 +237,9 @@ export default function InsightsPanel({ workspaceId }: InsightsPanelProps) {
                                             {new Date(insight.created_at).toLocaleDateString()}
                                         </span>
                                     </div>
-                                    <div className="text-sm text-white/80 whitespace-pre-wrap leading-relaxed">
-                                        {insight.content}
+                                    {/* Agent findings are markdown (headings, bold, tables); render them like chat answers */}
+                                    <div className="prose-chat overflow-x-auto">
+                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{insight.content}</ReactMarkdown>
                                     </div>
 
                                     <div className="mt-3 flex justify-end">
