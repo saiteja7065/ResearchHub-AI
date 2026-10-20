@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, BookOpen, Quote, ShieldCheck, Loader2, CheckCircle2, ChevronRight, Copy, Check } from 'lucide-react';
 import { fetchApi } from '../lib/api';
-import ReactMarkdown from 'react-markdown';
+import MarkdownReport from './MarkdownReport';
 
 interface Paper {
     id: string;
@@ -275,11 +275,11 @@ export default function AIToolsPanel({ isOpen, onClose, workspaceId, papers }: A
                                         </button>
                                     </div>
                                 </div>
-                                <div className="p-5 overflow-x-auto text-sm prose prose-sm dark:prose-invert max-w-none text-foreground leading-relaxed custom-scrollbar whitespace-pre-wrap">
+                                <div className="p-5 overflow-x-auto">
                                     {activeTab === 'citation' && citationFormat === 'BibTeX' ? (
-                                        <code className="text-xs">{result}</code>
+                                        <pre className="text-xs whitespace-pre-wrap font-mono text-foreground">{result}</pre>
                                     ) : (
-                                        <ReactMarkdown>{result}</ReactMarkdown>
+                                        <MarkdownReport text={result} />
                                     )}
                                 </div>
                             </motion.div>

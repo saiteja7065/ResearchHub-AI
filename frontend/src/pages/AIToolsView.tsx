@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Zap, BookOpen, Lightbulb, FileText, Loader2,
-    Download, CheckSquare, Square, ChevronDown, AlertCircle
+    Download, CheckSquare, Square, ChevronDown, AlertCircle, Copy, Check
 } from "lucide-react";
 import { fetchApi } from "../lib/api";
+import MarkdownReport from "../components/MarkdownReport";
 import { useWorkspaces } from "../hooks/useWorkspaces";
 
 interface Paper {
@@ -65,6 +66,7 @@ export default function AIToolsView() {
 
     const [activeTool, setActiveTool] = useState<ToolType | null>(null);
     const [result, setResult] = useState<{ text: string; title: string } | null>(null);
+    const [copied, setCopied] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -123,6 +125,17 @@ export default function AIToolsView() {
             setError(err.message || "Generation failed. Please try again.");
         } finally {
             setIsGenerating(false);
+        }
+    };
+
+    const handleCopy = async () => {
+        if (!result) return;
+        try {
+            await navigator.clipboard.writeText(result.text);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch {
+            // Clipboard can be blocked (e.g. insecure context); Download still works
         }
     };
 
@@ -281,20 +294,25 @@ export default function AIToolsView() {
                             animate={{ opacity: 1, y: 0 }}
                             className="bg-card border border-border/60 rounded-2xl p-6 space-y-4"
                         >
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between gap-3 flex-wrap">
                                 <h3 className="font-bold text-base">{result.title}</h3>
-                                <button
-                                    onClick={handleDownload}
-                                    className="flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-foreground text-xs font-semibold rounded-xl transition-all"
-                                >
-                                    <Download className="w-3.5 h-3.5" /> Download
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={handleCopy}
+                                        className="flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-foreground text-xs font-semibold rounded-xl transition-all"
+                                    >
+                                        {copied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                                        {copied ? "Copied" : "Copy"}
+                                    </button>
+                                    <button
+                                        onClick={handleDownload}
+                                        className="flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-foreground text-xs font-semibold rounded-xl transition-all"
+                                    >
+                                        <Download className="w-3.5 h-3.5" /> Download
+                                    </button>
+                                </div>
                             </div>
-                            <div className="prose prose-sm prose-invert max-w-none">
-                                <pre className="whitespace-pre-wrap text-sm text-foreground/90 leading-relaxed bg-secondary/30 rounded-xl p-4 border border-border/50 max-h-[500px] overflow-y-auto">
-                                    {result.text}
-                                </pre>
-                            </div>
+                            <MarkdownReport text={result.text} />
                         </motion.div>
                     )}
                 </AnimatePresence>
