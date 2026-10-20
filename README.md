@@ -38,8 +38,8 @@
 | Service | URL | Platform |
 |---|---|---|
 | **Frontend** | https://research-hub-ai-rho.vercel.app/ | Vercel |
-| **Backend API** | https://researchhub-ai-ke4d.onrender.com/ | Render |
-| **API Docs** | https://researchhub-ai-ke4d.onrender.com/docs | FastAPI Swagger |
+| **Backend API** | https://researchhub-ai-jr7x.onrender.com/ | Render |
+| **API Docs** | https://researchhub-ai-jr7x.onrender.com/docs | FastAPI Swagger |
 
 > ⚠️ **Note:** The backend is hosted on Render's free tier. First request may take up to 30 seconds if the server is cold-starting. Subsequent requests are instant.
 

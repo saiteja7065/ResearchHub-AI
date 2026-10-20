@@ -14,7 +14,7 @@ jobs:
     steps:
       - name: Ping backend (and touch the database)
         env:
-          BACKEND_URL: ${{ vars.BACKEND_URL || 'https://researchhub-ai-ke4d.onrender.com' }}
+          BACKEND_URL: ${{ vars.BACKEND_URL || 'https://researchhub-ai-jr7x.onrender.com' }}
         run: |
           for i in 1 2 3; do
             if curl -fsS --max-time 90 "$BACKEND_URL/health/deep"; then exit 0; fi
