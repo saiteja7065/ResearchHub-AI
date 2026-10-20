@@ -1,33 +1,33 @@
 @import "tailwindcss";
 
-/* Light theme is 15% darker than the original palette (each lightness value x 0.85) for less glare */
+/* Light theme is 5% darker than the original palette (each lightness value x 0.95) for less glare */
 @theme {
-  --color-border: hsl(240 5.9% 76.5%);
-  --color-input: hsl(240 5.9% 76.5%);
-  --color-ring: hsl(240 5.9% 8.5%);
-  --color-background: hsl(0 0% 85%);
-  --color-foreground: hsl(240 10% 3.3%);
+  --color-border: hsl(240 5.9% 85.5%);
+  --color-input: hsl(240 5.9% 85.5%);
+  --color-ring: hsl(240 5.9% 9.5%);
+  --color-background: hsl(0 0% 95%);
+  --color-foreground: hsl(240 10% 3.7%);
 
-  --color-primary: hsl(240 5.9% 8.5%);
+  --color-primary: hsl(240 5.9% 9.5%);
   --color-primary-foreground: hsl(0 0% 98%);
 
-  --color-secondary: hsl(240 4.8% 81.5%);
-  --color-secondary-foreground: hsl(240 5.9% 8.5%);
+  --color-secondary: hsl(240 4.8% 91.1%);
+  --color-secondary-foreground: hsl(240 5.9% 9.5%);
 
   --color-destructive: hsl(0 84.2% 60.2%);
   --color-destructive-foreground: hsl(0 0% 98%);
 
-  --color-muted: hsl(240 4.8% 81.5%);
-  --color-muted-foreground: hsl(240 3.8% 39.2%);
+  --color-muted: hsl(240 4.8% 91.1%);
+  --color-muted-foreground: hsl(240 3.8% 43.8%);
 
-  --color-accent: hsl(240 4.8% 81.5%);
-  --color-accent-foreground: hsl(240 5.9% 8.5%);
+  --color-accent: hsl(240 4.8% 91.1%);
+  --color-accent-foreground: hsl(240 5.9% 9.5%);
 
-  --color-popover: hsl(0 0% 85%);
-  --color-popover-foreground: hsl(240 10% 3.3%);
+  --color-popover: hsl(0 0% 95%);
+  --color-popover-foreground: hsl(240 10% 3.7%);
 
-  --color-card: hsl(0 0% 85%);
-  --color-card-foreground: hsl(240 10% 3.3%);
+  --color-card: hsl(0 0% 95%);
+  --color-card-foreground: hsl(240 10% 3.7%);
 
   --radius-lg: 0.75rem;
   --radius-md: calc(0.75rem - 2px);
